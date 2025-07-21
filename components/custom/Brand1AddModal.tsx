@@ -1,4 +1,4 @@
-import React, { FC } from 'react';
+import React, { FC, useState } from 'react';
 import PropTypes from 'prop-types';
 import { useFormik } from 'formik';
 import Modal, { ModalBody, ModalFooter, ModalHeader, ModalTitle } from '../bootstrap/Modal';
@@ -19,7 +19,8 @@ interface BrandAddModalProps {
 
 const BrandAddModal: FC<BrandAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 	const [addBrand, { isLoading }] = useAddBrand1Mutation();
-	const { data: BrandData,refetch } = useGetBrands1Query(undefined);
+	const { data: BrandData, refetch } = useGetBrands1Query(undefined);
+	const [isSubmitting, setIsSubmitting] = useState(false);
 	const {
 		data: categories,
 		isLoading: categoriesLoading,
@@ -51,57 +52,86 @@ const BrandAddModal: FC<BrandAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 			return errors;
 		},
 		onSubmit: async (values) => {
+			if (isSubmitting) return; // Prevent multiple submissions
+			setIsSubmitting(true); // Set submitting state to true
+			
 			try {
 				await refetch();
 		
 				const trimmedName = values.name.trim();
-				const trimmedCategory  = values.category.trim();
+				const trimmedCategory = values.category.trim();
+				
+				if (!trimmedName || !trimmedCategory) {
+					await Swal.fire({
+						icon: 'error',
+						title: 'Validation Error',
+						text: 'Both brand name and category are required.',
+					});
+					setIsSubmitting(false); // Reset submitting state
+					return;
+				}
+				
 				const existingBrand = BrandData?.find(
 					(brand: { name: string; category: string }) =>
 						brand.name.toLowerCase() === trimmedName.toLowerCase() &&
 						brand.category.toLowerCase() === trimmedCategory.toLowerCase()				
-					);
+				);
 				
-		
 				if (existingBrand) {
 					await Swal.fire({
 						icon: 'error',
 						title: 'Duplicate Brand',
 						text: 'A Brand with this name already exists.',
 					});
+					setIsSubmitting(false); // Reset submitting state
 					return;
 				}
 
-				const process = Swal.fire({
+				const processingSwal = Swal.fire({
 					title: 'Processing...',
 					html: 'Please wait while the data is being processed.<br><div class="spinner-border" role="status"></div>',
 					allowOutsideClick: false,
 					showCancelButton: false,
 					showConfirmButton: false,
 				});
+				
 				try {
-					const response: any = await addBrand({
-						...values, name: trimmedName, category: trimmedCategory
+					const response = await addBrand({
+						name: trimmedName, 
+						category: trimmedCategory,
+						status: true
 					}).unwrap();
-					refetch();
+					
+					Swal.close();
+					
 					await Swal.fire({
 						icon: 'success',
 						title: 'Brand Created Successfully',
 					});
 					formik.resetForm();
 					setIsOpen(false);
-				} catch (error) {
-					console.error('Error during handleSubmit: ', error);
+					refetch();
+				} catch (error:any) {
+					Swal.close();
+					
+					console.error('Error during brand creation: ', error);
 					await Swal.fire({
 						icon: 'error',
 						title: 'Error',
-						text: 'Failed to add the brand. Please try again.',
+						text: error.data?.details || error.data?.error || 'Failed to add the brand. Please try again.',
 					});
 				}
 			} catch (error) {
-				console.error('Error during handleUpload: ', error);
-				Swal.close;
-				alert('An error occurred during file upload. Please try again later.');
+				Swal.close();
+				
+				console.error('Error during form submission: ', error);
+				await Swal.fire({
+					icon: 'error',
+					title: 'Error',
+					text: 'An unexpected error occurred. Please try again later.',
+				});
+			} finally {
+				setIsSubmitting(false); // Reset submitting state in all cases
 			}
 		},
 	});
@@ -162,8 +192,11 @@ const BrandAddModal: FC<BrandAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 				</div>
 			</ModalBody>
 			<ModalFooter className='px-4 pb-4'>
-				<Button color='success' onClick={formik.handleSubmit} isDisable={isLoading}>
-					{isLoading ? 'Saving...' : 'Create Brand'}
+				<Button 
+					color='success' 
+					onClick={formik.handleSubmit} 
+					isDisable={isSubmitting || formik.isSubmitting || isLoading}>
+					{isSubmitting ? 'Creating...' : 'Create Brand'}
 				</Button>
 			</ModalFooter>
 		</Modal>

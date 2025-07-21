@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { NextPage } from 'next';
 import Head from 'next/head';
 import useDarkMode from '../../../hooks/useDarkMode';
@@ -27,7 +27,11 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { DropdownItem } from '../../../components/bootstrap/Dropdown';
 import { toPng, toSvg } from 'html-to-image';
-import { useGetItemDiss1Query, useUpdateItemDisMutation } from '../../../redux/slices/itemManagementDisApiSlice';
+import {
+	useGetItemDiss1Query,
+	useUpdateItemDisMutation,
+	useAddItemDisMutation,
+} from '../../../redux/slices/itemManagementDisApiSlice';
 import { useGetItemDissQuery } from '../../../redux/slices/itemManagementDisApiSlice';
 import PaginationButtons, {
 	dataPagination,
@@ -37,7 +41,6 @@ import bill from '../../../assets/img/bill/WhatsApp_Image_2024-09-12_at_12.26.10
 import { ref } from 'firebase/storage';
 import {
 	useGetStockInOutByIdQuery,
-	
 	useGetStockInOutsQuery,
 } from '../../../redux/slices/stockInOutDissApiSlice';
 import { tr } from 'date-fns/locale';
@@ -45,7 +48,9 @@ import { tr } from 'date-fns/locale';
 const Index: NextPage = () => {
 	const { darkModeStatus } = useDarkMode();
 	const [searchTerm, setSearchTerm] = useState('');
-	// const [s, setId] = useState('');
+	const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
+	const [categoryFilter, setCategoryFilter] = useState<string>('');
+	const [brandFilter, setBrandFilter] = useState<string>('');
 	const [addModalStatus, setAddModalStatus] = useState<boolean>(false);
 	const [returnModalStatus, setReturnModalStatus] = useState<boolean>(false);
 	const [editModalStatus, setEditModalStatus] = useState<boolean>(false);
@@ -56,25 +61,25 @@ const Index: NextPage = () => {
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [perPage, setPerPage] = useState<number>(PER_COUNT['100']);
 	const [lastDoc, setLastDoc] = useState(null);
-	
-	// const { data: itemDiss,} = useGetItemDissQuery(undefined);
+	const [showLowStockAlert, setShowLowStockAlert] = useState(false);
+	const [lowStockItems, setLowStockItems] = useState<any[]>([]);
 	const {
-			data: itemDiss,
-			error,
-			isLoading,
-			refetch,
-		} =  useGetItemDiss1Query({ page: currentPage, perPage, lastDoc,searchtearm:searchTerm });
+		data: itemDiss,
+		error,
+		isLoading,
+		refetch,
+	} = useGetItemDissQuery(debouncedSearchTerm);
 	const {
 		data: StockInOuts,
 		error: stockInOutError,
 		isLoading: stockInOutLoading,
 	} = useGetStockInOutByIdQuery(id);
-	
 	const [updateItemDis] = useUpdateItemDisMutation();
 	const [quantity, setQuantity] = useState<any>();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [formStatus, setFormStatus] = useState<boolean>(false);
 	const [expandedRow, setExpandedRow] = useState(null);
+	const [lowStockAlertShown, setLowStockAlertShown] = useState(false);
 	const toggleRow = (index: any) => {
 		setExpandedRow(expandedRow === index ? null : index);
 	};
@@ -83,13 +88,34 @@ const Index: NextPage = () => {
 			inputRef.current.focus();
 		}
 	}, [itemDiss]);
-useEffect(() => {
+	useEffect(() => {
 		if (itemDiss?.lastDoc) {
 			setLastDoc(itemDiss.lastDoc);
 		}
 	}, []);
+	
+	// Check for low stock items and show alert only once on initial load
+	useEffect(() => {
+		if (itemDiss && !lowStockAlertShown) {
+			// Find items that are at or below reorder level
+			const lowItems = itemDiss.filter((item: any) => 
+				item.quantity <= item.reorderLevel
+			);
+			setLowStockItems(lowItems);
+			if (lowItems.length > 0) {
+				setShowLowStockAlert(true);
+				setLowStockAlertShown(true);
+				// Show notification only on initial load
+				Swal.fire({
+					title: 'Low Stock Alert',
+					html: `<p>${lowItems.length} item(s) are at or below reorder level</p>`,
+					icon: 'warning',
+					confirmButtonText: 'OK',
+				});
+			}
+		}
+	}, [itemDiss, lowStockAlertShown]);
 	const handleClickDelete = async (itemDis: any) => {
-		console.log(itemDis);
 		if (itemDis.quantity > 0) {
 			Swal.fire('Error', 'Failed to delete stock item. stock quantity must be zero', 'error');
 
@@ -366,7 +392,81 @@ useEffect(() => {
 			if (table) restoreLastCells(table);
 		}
 	};
-	console.log(StockInOuts);
+
+	// Function to determine row styling based on stock level
+	const getRowStyle = (item: any) => {
+		if (item.quantity <= item.reorderLevel) {
+			return { backgroundColor: 'rgba(255, 193, 7, 0.2)' }; // Warning yellow background
+		}
+		return {};
+	};
+
+	// Debounce search term
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setDebouncedSearchTerm(searchTerm);
+		}, 500);
+
+		return () => clearTimeout(timer);
+	}, [searchTerm]);
+
+	// Update the search input handler
+	const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
+		const value = event.target.value;
+		setSearchTerm(value);
+	};
+
+	const [addItemDis] = useAddItemDisMutation();
+	const fileInputRef = useRef<HTMLInputElement>(null);
+
+	const handleImportClick = () => {
+		if (fileInputRef.current) fileInputRef.current.value = '';
+		fileInputRef.current?.click();
+	};
+
+	const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (!file) return;
+		const text = await file.text();
+		const lines = text.split(/\r?\n/).filter(Boolean);
+		if (lines.length < 2) {
+			Swal.fire('Error', 'CSV must have at least one data row.', 'error');
+			return;
+		}
+		// Parse header
+		const header = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g, ''));
+		const expected = ['Code','Model','Brand','Category','Quantity','Box Number'];
+		if (header.length < 6 || !expected.every((h, i) => header[i] === h)) {
+			Swal.fire('Error', 'CSV header must be: Code, Model, Brand, Category, Quantity, Box Number', 'error');
+			return;
+		}
+		// Parse rows
+		let success = 0, fail = 0;
+		for (let i = 1; i < lines.length; ++i) {
+			const row = lines[i].split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+			if (row.length < 6) { fail++; continue; }
+			const [code, model, brand, category, quantity, boxNumber] = row;
+			// Compose the object for the API
+			const item = {
+				code,
+				model,
+				brand,
+				category,
+				quantity: isNaN(Number(quantity)) ? 0 : Number(quantity),
+				boxNumber: isNaN(Number(boxNumber)) ? '' : boxNumber,
+				status: true
+			};
+			try {
+				await addItemDis(item).unwrap();
+				success++;
+			} catch (err) {
+				fail++;
+			}
+		}
+		refetch();
+		Swal.fire('Import Complete', `Imported: ${success}, Failed: ${fail}`, fail ? 'warning' : 'success');
+	};
+
 	return (
 		<PageWrapper>
 			<SubHeader>
@@ -380,15 +480,102 @@ useEffect(() => {
 						id='searchInput'
 						type='search'
 						className='border-0 shadow-none bg-transparent'
-						placeholder='Search...'
-						onChange={(event: any) => {
-							setSearchTerm(event.target.value);
-						}}
+						placeholder='Search by model, brand, category or box number...'
+						onChange={handleSearch}
 						value={searchTerm}
 						ref={inputRef}
 					/>
+					<select
+						className='form-select me-2'
+						value={categoryFilter}
+						onChange={(e) => setCategoryFilter(e.target.value)}
+						style={{ minWidth: '120px' }}>
+						<option value=''>All Categories</option>
+						<option value='Display'>Display</option>
+						<option value='Battery'>Battery</option>
+						<option value='Screens'>Screens</option>
+					</select>
+					<select
+						className='form-select me-2'
+						value={brandFilter}
+						onChange={(e) => setBrandFilter(e.target.value)}
+						style={{ minWidth: '120px' }}>
+						<option value=''>All Brands</option>
+						{itemDiss?.map((item: any) => item.brand).filter((brand: string, index: number, arr: string[]) => arr.indexOf(brand) === index).map((brand: string) => (
+							<option key={brand} value={brand}>{brand}</option>
+						))}
+					</select>
 				</SubHeaderLeft>
 				<SubHeaderRight>
+					{showLowStockAlert && (
+						<Button
+							icon='Warning'
+							color='warning'
+							isLight
+							onClick={() => {
+								Swal.fire({
+									title: 'Low Stock Items',
+									html: `
+										<div class="low-stock-container">
+											<table class="low-stock-table">
+												<thead>
+													<tr>
+														<th>Item</th>
+														<th>Category</th>
+														<th>Quantity</th>
+														<th>Reorder Level</th>
+													</tr>
+												</thead>
+												<tbody>
+													${lowStockItems.map((item: any) => `
+														<tr class="${item.quantity < item.reorderLevel ? 'critical-stock' : 'low-stock'}">
+															<td><strong>${item.brand} ${item.model}</strong></td>
+															<td>${item.category}</td>
+															<td>${item.quantity}</td>
+															<td>${item.reorderLevel}</td>
+														</tr>
+													`).join('')}
+												</tbody>
+											</table>
+										</div>
+										<style>
+											.low-stock-container {
+												max-height: 60vh;
+												overflow-y: auto;
+												margin-top: 10px;
+											}
+											.low-stock-table {
+												width: 100%;
+												border-collapse: collapse;
+												margin-bottom: 0;
+											}
+											.low-stock-table th,
+											.low-stock-table td {
+												padding: 8px;
+												text-align: left;
+												border-bottom: 1px solid #ddd;
+											}
+											.low-stock-table th {
+												background-color: #f2f2f2;
+												font-weight: bold;
+											}
+											.critical-stock {
+												background-color: rgba(255, 0, 0, 0.1);
+											}
+											.low-stock {
+												background-color: rgba(255, 193, 7, 0.1);
+											}
+										</style>
+									`,
+									width: '600px',
+									icon: 'warning',
+									confirmButtonText: 'OK',
+								});
+							}}
+						>
+							{lowStockItems.length} Low Stock Items
+						</Button>
+					)}
 					<Button
 						icon='AddCircleOutline'
 						color='warning'
@@ -403,6 +590,16 @@ useEffect(() => {
 						onClick={() => setAddModalStatus(true)}>
 						Create Item
 					</Button>
+					<Button icon='UploadFile' color='info' isLight onClick={handleImportClick} style={{marginRight: 8}}>
+						Import CSV
+					</Button>
+					<input
+						type='file'
+						accept='.csv,text/csv'
+						ref={fileInputRef}
+						style={{ display: 'none' }}
+						onChange={handleFileChange}
+					/>
 				</SubHeaderRight>
 			</SubHeader>
 			<Page>
@@ -473,81 +670,66 @@ useEffect(() => {
 												</tr>
 											)}
 											{itemDiss &&
-												dataPagination(itemDiss.data, currentPage, perPage)
-													.filter((brand: any) => {
-														const search = searchTerm.toLowerCase();
-														return (
-															brand.code
-																?.toString()
-																.toLowerCase()
-																.includes(searchTerm.slice(0, 4)) ||
-															(brand.brand + ' ' + brand.model)
-																?.toLowerCase()
-																.includes(search) ||
-															(
-																brand.category +
-																' ' +
-																brand.brand +
-																' ' +
-																brand.model
-															)
-																?.toLowerCase()
-																.includes(search) ||
-															(
-																brand.category +
-																' ' +
-																brand.model +
-																' ' +
-																brand.brand
-															)
-																?.toLowerCase()
-																.includes(search) ||
-															brand.model
-																?.toLowerCase()
-																.includes(search) ||
-															brand.brand
-																?.toLowerCase()
-																.includes(search) ||
-															brand.category
-																?.toLowerCase()
-																.includes(search)
-														);
+												dataPagination(itemDiss, currentPage, perPage)
+													.filter((item: any) => {
+														// Apply category filter
+														if (categoryFilter && item.category !== categoryFilter) {
+															return false;
+														}
+														// Apply brand filter
+														if (brandFilter && item.brand !== brandFilter) {
+															return false;
+														}
+														return true;
 													})
-													.sort(
-														(a: any, b: any) => a.quantity - b.quantity,
-													)
-													.map((itemDiss: any, index: any) => (
+													.map((item: any, index: any) => (
 														<React.Fragment key={index}>
-															<tr key={index}>
+															<tr key={index} style={getRowStyle(item)}>
 																<td
-																	onClick={() =>{setId(itemDiss.code),toggleRow(index)}
-																	
-																		
-
-																	}>
-																	{itemDiss.code}
+																	onClick={() => {
+																		setId(item.code),
+																			toggleRow(index);
+																	}}>
+																	{item.code}
 																</td>
 																<td
-																	onClick={() =>{setId(itemDiss.code),toggleRow(index)}}
-																	>
-																	{itemDiss.model}
+																	onClick={() => {
+																		setId(item.code),
+																			toggleRow(index);
+																	}}>
+																	{item.model}
 																</td>
 																<td
-																	onClick={() =>{setId(itemDiss.code),toggleRow(index)}}>
-																	{itemDiss.brand}
+																	onClick={() => {
+																		setId(item.code),
+																			toggleRow(index);
+																	}}>
+																	{item.brand}
 																</td>
 																<td
-																	onClick={() =>{setId(itemDiss.code),toggleRow(index)}}>
-																	{itemDiss.category}
+																	onClick={() => {
+																		setId(item.code),
+																			toggleRow(index);
+																	}}>
+																	{item.category}
 																</td>
 																{/* <td>{itemDiss.reorderLevel}</td> */}
 																<td
-																	onClick={() =>{setId(itemDiss.code),toggleRow(index)}}>
-																	{itemDiss.quantity}
+																	onClick={() => {
+																		setId(item.code),
+																			toggleRow(index);
+																	}}>
+																	{item.quantity}
+																	{item.quantity <= item.reorderLevel && (
+																		<Icon icon='Warning' color='warning' className='ms-2' />
+																	)}
 																</td>
 																<td
-																	onClick={() =>{setId(itemDiss.code),toggleRow(index)}}>
-																	{itemDiss.boxNumber}
+																	onClick={() => {
+																		setId(item.code),
+																			toggleRow(index);
+																	}}>
+																	{item.boxNumber}
 																</td>
 
 																<td>
@@ -559,9 +741,9 @@ useEffect(() => {
 																			setAddstockModalStatus(
 																				true,
 																			);
-																			setId(itemDiss.id);
+																			setId(item.id);
 																			setQuantity(
-																				itemDiss.quantity,
+																				item.quantity,
 																			);
 																		}}></Button>
 																</td>
@@ -575,9 +757,9 @@ useEffect(() => {
 																			setEditstockModalStatus(
 																				true,
 																			),
-																			setId(itemDiss.id),
+																			setId(item.id),
 																			setQuantity(
-																				itemDiss.quantity,
+																				item.quantity,
 																			)
 																		)}></Button>
 																</td>
@@ -590,7 +772,7 @@ useEffect(() => {
 																			setEditModalStatus(
 																				true,
 																			),
-																			setId(itemDiss.id)
+																			setId(item.id)
 																		)}></Button>
 																</td>
 																<td>
@@ -600,7 +782,7 @@ useEffect(() => {
 																		color='danger'
 																		onClick={() =>
 																			handleClickDelete(
-																				itemDiss,
+																				item,
 																			)
 																		}></Button>
 																</td>

@@ -35,10 +35,11 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 	const { data: itemDiss, refetch } = useGetItemDissQuery(undefined);
 	const [updateItemDis, { isLoading }] = useUpdateItemDisMutation();
 	const itemDisToEdit = itemDiss?.find((itemDis: any) => itemDis.id === id);
-	const { data: brands } = useGetBrandsQuery(undefined);
+	const { data: brands } = useGetBrandsQuery({});
+
 	const { data: models } = useGetModelsQuery(undefined);
 	const { data: categories } = useGetCategoriesQuery(undefined);
-	const [selectedCategory, setSelectedCategory] = useState<string>('');
+	const [selectedCategory, setSelectedCategory] = useState<string>(itemDisToEdit?.category);
 	const [selectedBrand, setSelectedBrand] = useState<string>('');
 	const [customCategory, setCustomCategory] = useState<string>('');
 	const divRef: any = useRef(null);
@@ -174,13 +175,13 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 	};
 
 	const filteredBrands = brands?.filter(
-		(brand: any) => brand.category === selectedCategory || selectedCategory === 'Other',
+		(brand: any) => brand.category === itemDisToEdit?.category || itemDisToEdit?.category === 'Other',
 	);
 
 	const filteredModels = models?.filter(
 		(model: any) =>
-			model.brand === selectedBrand &&
-			(model.category === selectedCategory || selectedCategory === 'Other'),
+			model.brand === itemDisToEdit?.brand &&
+			(model.category === itemDisToEdit?.category || itemDisToEdit?.category === 'Other'),
 	);
 
 	return (
@@ -264,8 +265,8 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 					<FormGroup id='brandSelect' label='Brand' className='col-md-6'>
 						<Select
 							ariaLabel='Select brand'
-							onChange={handleBrandChange}
-							value={selectedBrand}
+							onChange={formik.handleChange}
+							value={formik.values.brand}
 							onBlur={formik.handleBlur}
 							isValid={formik.isValid}
 							isTouched={formik.touched.brand}
@@ -275,6 +276,28 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 							{filteredBrands?.map((brand: any) => (
 								<Option key={brand.id} value={brand.name}>
 									{brand.name}
+								</Option>
+							))}
+						</Select>
+					</FormGroup>
+
+					<FormGroup id='categoryDropdown' label='Category' className='col-md-6'>
+						<Select
+							ariaLabel='Select category'
+							onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+								formik.setFieldValue('category', e.target.value);
+								setSelectedCategory(e.target.value);
+							}}
+							value={formik.values.category}
+							onBlur={formik.handleBlur}
+							isValid={formik.isValid}
+							isTouched={formik.touched.category}
+							invalidFeedback={formik.errors.category}
+							validFeedback='Looks good!'>
+							<Option value=''>Select Category</Option>
+							{categories?.map((category: any) => (
+								<Option key={category.id} value={category.name}>
+									{category.name}
 								</Option>
 							))}
 						</Select>

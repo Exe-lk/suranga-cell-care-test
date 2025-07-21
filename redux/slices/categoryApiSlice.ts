@@ -2,11 +2,11 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
 export const categoryApiSlice = createApi({
   reducerPath: 'categoryApi',
-  baseQuery: fetchBaseQuery({ baseUrl: 'https://suranga-cell-care-test.netlify.app/api/' }),
+  baseQuery: fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_BASE_URL }),
   tagTypes: ['Category'],
   endpoints: (builder) => ({
     getCategories: builder.query({
-      query: () => 'category/route',
+      query: (searchTerm) => searchTerm ? `category/route?search=${searchTerm}` : 'category/route',
       providesTags: ['Category'],
     }),
     getCategoryById: builder.query({
@@ -31,7 +31,12 @@ export const categoryApiSlice = createApi({
         method: 'PUT',
         body: updatedCategory,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: 'Category', id }],
+      invalidatesTags: (result, error,  id ) => [
+        { type: 'Category', id },
+        // 'Category',
+        // 'Brand',
+        // 'Model'
+      ],
     }),
     deleteCategory: builder.mutation({
       query: (id) => ({

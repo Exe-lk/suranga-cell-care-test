@@ -1,24 +1,27 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { collection, getDocs } from 'firebase/firestore';
-import { firestore } from '../../../firebaseConfig';
-import PageWrapper from '../../../layout/PageWrapper/PageWrapper';
-import Page from '../../../layout/Page/Page';
-import Card, { CardBody, CardTitle } from '../../../components/bootstrap/Card';
-import { number } from 'prop-types';
+import React, { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/router';
+import Swal from 'sweetalert2';
+import Button from '../../../components/bootstrap/Button';
+import Card, {
+	CardBody,
+	CardHeader,
+	CardLabel,
+	CardTitle,
+} from '../../../components/bootstrap/Card';
 import Dropdown, {
 	DropdownItem,
 	DropdownMenu,
 	DropdownToggle,
 } from '../../../components/bootstrap/Dropdown';
-import Button from '../../../components/bootstrap/Button';
+import Input from '../../../components/bootstrap/forms/Input';
+import Page from '../../../layout/Page/Page';
+import PageWrapper from '../../../layout/PageWrapper/PageWrapper';
 import SubHeader, {
 	SubHeaderLeft,
-	SubHeaderRight,
-	SubheaderSeparator,
 } from '../../../layout/SubHeader/SubHeader';
 import Icon from '../../../components/icon/Icon';
-import Input from '../../../components/bootstrap/forms/Input';
-import Swal from 'sweetalert2';
+import { useGetAllReturnsQuery } from '../../../redux/slices/returnDisplayApiSlice';
+import moment from 'moment';
 
 interface User {
 	cid: string;
@@ -31,145 +34,105 @@ interface User {
 	profile_picture: string;
 }
 
+interface ReturnItem {
+	id: number;
+	barcode: string;
+	brand: string;
+	category: string;
+	model: string;
+	condition: string;
+	date: string;
+	created_at?: string;
+	updated_at?: string;
+}
+
 const Index: React.FC = () => {
-	const [searchyear, setSearchyear] = useState<number>(new Date().getFullYear());
-	const [searchmonth, setSearchmonth] = useState<string>('');
-	const [searchDate, setSearchDate] = useState<string>('');
-	const [orders, setOrders] = useState<any[]>([]);
-	const [filteredOrders, setFilteredOrders] = useState<any[]>([]);
-	const [user, setUser] = useState<User[]>([]);
-	const [expandedRow, setExpandedRow] = useState(null);
-	const [searchTerm, setSearchTerm] = useState(''); // State for search term
-	const invoiceRef: any = useRef();
+	const router = useRouter();
+	const [expandedRow, setExpandedRow] = useState<number | null>(null);
+	const [searchTerm, setSearchTerm] = useState('');
+	const [searchDate, setSearchDate] = useState('');
+	const [users, setUsers] = useState<User[]>([]);
+	const [filteredOrders, setFilteredOrders] = useState<ReturnItem[]>([]);
 	const [chunks, setChunks] = useState<any[]>([]);
-	const [orderedItems, setOrderedItems] = useState<any>();
+	const [orderedItems, setOrderedItems] = useState<any>({});
+	const invoiceRef = useRef<HTMLDivElement>(null);
+
+	// Use the RTK Query hook to fetch returns
+	const { data: returns, error, isLoading, refetch } = useGetAllReturnsQuery();
+
+	// Toggle row expansion
 	const toggleRow = (index: any) => {
 		setExpandedRow(expandedRow === index ? null : index);
 	};
-	useEffect(() => {
-		const fetchData = async () => {
-			try {
-				const dataCollection = collection(firestore, 'returnDisplay');
-				const querySnapshot = await getDocs(dataCollection);
-				const firebaseData = querySnapshot.docs.map((doc) => {
-					const data = doc.data() as any;
-					return {
-						...data,
-						cid: doc.id,
-					};
-				});
-				setOrders(firebaseData);
-			} catch (error) {
-				console.error('Error fetching data: ', error);
+
+	// Enhanced filter function with better search capabilities
+	const filterReturns = (items: ReturnItem[]) => {
+		if (!items) return [];
+		
+		return items.filter((item) => {
+			// Date filter
+			if (searchDate) {
+				const dateFormatted = moment(searchDate).format('MMM D YYYY');
+				if (item.date !== dateFormatted) return false;
 			}
-		};
-		fetchData();
-	}, []);
-
-	useEffect(() => {
-		const fetchData = async () => {
-			try {
-				const dataCollection = collection(firestore, 'user');
-				const querySnapshot = await getDocs(dataCollection);
-				const firebaseData = querySnapshot.docs.map((doc) => {
-					const data = doc.data() as User;
-					return {
-						...data,
-						cid: doc.id,
-					};
-				});
-				setUser(firebaseData);
-			} catch (error) {
-				console.error('Error fetching data: ', error);
+			
+			// Search term filter
+			if (searchTerm) {
+				const search = searchTerm.toLowerCase();
+				const searchableText = [
+					item.barcode?.toString(),
+					item.brand,
+					item.model,
+					item.category,
+					item.condition,
+					item.id?.toString()
+				].filter(Boolean).join(' ').toLowerCase();
+				
+				if (!searchableText.includes(search)) return false;
 			}
-		};
-		fetchData();
-	}, []);
-
-	useEffect(() => {
-		const filterOrdersByDate = () => {
-			return orders.filter((order) => {
-				const orderDate = new Date(order.date);
-				const orderYear = orderDate.getFullYear();
-				const orderMonth = orderDate.toLocaleString('default', { month: 'short' });
-				const formattedSearchDate = new Date(searchDate).toDateString();
-
-				console.log(`Order Date: ${order.date}, Year: ${orderYear}, Month: ${orderMonth}`);
-				console.log(
-					`Search Year: ${searchyear}, Search Month: ${searchmonth}, Search Date: ${searchDate}`,
-				);
-
-				if (searchDate && new Date(order.date).toDateString() !== formattedSearchDate) {
-					return false;
-				}
-				if (searchmonth && searchmonth !== orderMonth) {
-					return false;
-				}
-				// if (searchyear && searchyear !== orderYear) {
-				// 	return false;
-				// }
-				return true;
-			});
-		};
-
-		setFilteredOrders(filterOrdersByDate());
-	}, [orders, searchyear, searchmonth, searchDate]);
-
-	const getCashierName = (email: string) => {
-		const user1 = user.find((user: { email: string }) => user.email === email);
-		return user1 ? user1.name : 'Unknown';
+			
+			return true;
+		});
 	};
-	const handleExport = (format: any) => {
-		if (format === 'csv') {
-			// Flatten data
-			const csvRows = [
-				[
-					'Date',
-					'Start Time',
-					'End Time',
-					'Cashier',
-					'Bill No',
-					'Sub Total',
-					'Item Name',
-					'Unit Price',
-					'Discount',
-					'Quantity',
-					'Total Price',
-				], // Header row
+
+	// Filter orders based on date and search term
+	useEffect(() => {
+		if (returns) {
+			const filtered = filterReturns(returns);
+			setFilteredOrders(filtered);
+		}
+	}, [returns, searchDate, searchTerm]);
+
+	// Export data to CSV with enhanced data
+	const handleExport = (format: string) => {
+		if (format === 'csv' && filteredOrders.length > 0) {
+			// Create headers
+			const headers = [
+				'Return ID',
+				'Return Date',
+				'Barcode',
+				'Condition',
+				'Category',
+				'Brand',
+				'Model',
+				'Created At',
 			];
 
-			orders.forEach((order) => {
-				// Add the main order row
-				csvRows.push([
-					order.date,
-					order.time,
-					order.time,
-					getCashierName(order.casheir),
-					order.id,
-					order.amount,
-					'', // Empty columns for item details
-					'',
-					'',
-					'',
-					'',
-				]);
+			// Create rows
+			const csvRows = [headers];
 
-				// Add rows for each item
-				order.orders.forEach((item: any) => {
-					csvRows.push([
-						'', // Empty columns for the order details
-						'',
-						'',
-						'',
-						'',
-						'',
-						item.name,
-						item.price,
-						item.discount,
-						item.quantity,
-						item.price * item.quantity,
-					]);
-				});
+			// Add data rows
+			filteredOrders.forEach((item) => {
+				csvRows.push([
+					item.id.toString(),
+					item.date,
+					item.barcode,
+					item.condition,
+					item.category || '',
+					item.brand || '',
+					item.model || '',
+					item.created_at ? moment(item.created_at).format('YYYY-MM-DD HH:mm:ss') : '',
+				]);
 			});
 
 			// Convert to CSV string
@@ -181,47 +144,46 @@ const Index: React.FC = () => {
 			const encodedUri = encodeURI(csvContent);
 			const link = document.createElement('a');
 			link.setAttribute('href', encodedUri);
-			link.setAttribute('download', 'purchasing_history.csv');
-			document.body.appendChild(link); // Required for Firefox
+			link.setAttribute('download', `return_history_${moment().format('YYYY-MM-DD')}.csv`);
+			document.body.appendChild(link);
 			link.click();
 			document.body.removeChild(link);
+			
+			// Show success message
+			Swal.fire({
+				icon: 'success',
+				title: 'Export Successful',
+				text: `Exported ${filteredOrders.length} return records to CSV.`,
+				timer: 2000,
+				showConfirmButton: false
+			});
+		} else if (filteredOrders.length === 0) {
+			Swal.fire({
+				icon: 'warning',
+				title: 'No Data to Export',
+				text: 'There are no return records matching your current filters.',
+			});
 		}
 	};
-	const chunkItems = (array: any[], chunkSize: number) => {
-		const chunks = [];
-		for (let i = 0; i < array.length; i += chunkSize) {
-			chunks.push(array.slice(i, i + chunkSize));
-		}
 
-		return chunks;
+	// Function to clear all filters
+	const clearFilters = () => {
+		setSearchTerm('');
+		setSearchDate('');
 	};
 
-	const handleprint = async (order: any) => {
-		const chunks = chunkItems(order.orders, 5);
-		await setChunks(chunks);
-		await setOrderedItems(order);
-		console.log(order);
-		const printContent: any = invoiceRef.current.innerHTML;
-
-		// Temporarily hide other content on the page
-		const originalContent = document.body.innerHTML;
-		document.body.innerHTML = printContent;
-
-		// Trigger the print dialog
-		window.print();
-
-		// Restore the original content after printing
-		document.body.innerHTML = originalContent;
-
+	// Function to refresh data
+	const handleRefresh = () => {
+		refetch();
 		Swal.fire({
-			title: 'Success',
-			text: 'Bill has been added successfully.',
 			icon: 'success',
-			showConfirmButton: false,
-			timer: 1000,
+			title: 'Data Refreshed',
+			text: 'Return history has been updated.',
+			timer: 1500,
+			showConfirmButton: false
 		});
-		window.location.reload();
 	};
+
 	return (
 		<>
 			<PageWrapper>
@@ -236,7 +198,7 @@ const Index: React.FC = () => {
 							id='searchInput'
 							type='search'
 							className='border-0 shadow-none bg-transparent'
-							placeholder='Search...'
+							placeholder='Search by ID, barcode, brand, model, category, or condition...'
 							onChange={(event: any) => {
 								setSearchTerm(event.target.value);
 							}}
@@ -249,17 +211,40 @@ const Index: React.FC = () => {
 						<div className='col-12'>
 							<Card stretch>
 								<CardTitle className='d-flex justify-content-between align-items-center m-4'>
-									<div className='mt-2 mb-4'>
-										Select date :
-										<input
-											type='date'
-											onChange={(e: any) => setSearchDate(e.target.value)}
-											value={searchDate}
-											className='px-3 py-2 ms-4 border border-blue-500 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500'
-										/>
+									<div className='d-flex align-items-center gap-3'>
+										<div>
+											<label className='form-label mb-1'>Filter by Date:</label>
+											<input
+												type='date'
+												onChange={(e: any) => setSearchDate(e.target.value)}
+												value={searchDate}
+												className='form-control'
+												style={{ width: '200px' }}
+											/>
+										</div>
+										{(searchTerm || searchDate) && (
+											<Button
+												color='secondary'
+												size='sm'
+												onClick={clearFilters}
+												className='mt-4'>
+												Clear Filters
+											</Button>
+										)}
+										<Button
+											color='info'
+											size='sm'
+											onClick={handleRefresh}
+											className='mt-4'>
+											<Icon icon='Refresh' className='me-1' />
+											Refresh
+										</Button>
 									</div>
 									<div className='flex-grow-1 text-center text-primary'>
-										Return History
+										<h4>Return History</h4>
+										<small className='text-muted'>
+											{filteredOrders.length} of {returns?.length || 0} records
+										</small>
 									</div>
 									<Dropdown>
 										<DropdownToggle hasIcon={false}>
@@ -269,65 +254,119 @@ const Index: React.FC = () => {
 										</DropdownToggle>
 										<DropdownMenu isAlignmentEnd>
 											<DropdownItem onClick={() => handleExport('csv')}>
-												Download CSV
+												<span>
+													<Icon icon='FileDownload' className='me-2' />
+													Download CSV
+												</span>
 											</DropdownItem>
 										</DropdownMenu>
 									</Dropdown>
 								</CardTitle>
 								<CardBody isScrollable className='table-responsive'>
-									<table className='table table-hover table-bordered border-primary'>
-										<thead className={'table-dark border-primary'}>
-											<tr>
-												<th>Return Id </th>
-												<th>Date</th>
-												<th>Barcode</th>
-												<th>Condition </th>
-												<td>Category</td>
-												<th>Brand</th>
-												<th>Model</th>
-											</tr>
-										</thead>
-										<tbody>
-											{filteredOrders
-
-												.filter((val) => {
-													if (searchTerm === '') {
-														return val;
-													} else if (
-														val.cid.toString().includes(searchTerm)
-													) {
-														return val;
-													}
-												})
-												.sort((a: any, b: any) => b.id - a.id)
-												.map((order: any, index) => (
-													<React.Fragment key={index}>
-														<tr style={{ cursor: 'pointer' }}>
-															<td>{order.cid}</td>
-															<td onClick={() => toggleRow(index)}>
-																{order.date}
-															</td>
-															<td onClick={() => toggleRow(index)}>
-																{order.barcode}
-															</td>
-															<td onClick={() => toggleRow(index)}>
-																{order.condition}
-															</td>
-															<td onClick={() => toggleRow(index)}>
-																{order.category}
-															</td>
-															<td onClick={() => toggleRow(index)}>
-																{order.brand}
-															</td>
-															<td onClick={() => toggleRow(index)}>
-																{order.model}
-															</td>
-															
-														</tr>
-													</React.Fragment>
-												))}
-										</tbody>
-									</table>
+									{isLoading && (
+										<div className="text-center p-4">
+											<div className="spinner-border text-primary" role="status">
+												<span className="visually-hidden">Loading...</span>
+											</div>
+											<p className="mt-2">Loading return data...</p>
+										</div>
+									)}
+									{error && (
+										<div className="alert alert-danger m-4">
+											<Icon icon='Error' className='me-2' />
+											Error loading return data. Please try again.
+											<Button
+												color='link'
+												size='sm'
+												onClick={handleRefresh}
+												className='ms-2'>
+												Retry
+											</Button>
+										</div>
+									)}
+									{!isLoading && !error && (
+										<table className='table table-hover table-bordered border-primary'>
+											<thead className={'table-dark border-primary'}>
+												<tr>
+													<th>Return ID</th>
+													<th>Return Date</th>
+													<th>Created At</th>
+													<th>Barcode</th>
+													<th>Condition</th>
+													<th>Category</th>
+													<th>Brand</th>
+													<th>Model</th>
+												</tr>
+											</thead>
+											<tbody>
+												{filteredOrders.length > 0 ? (
+													filteredOrders.map((item, index) => (
+														<React.Fragment key={item.id}>
+															<tr style={{ cursor: 'pointer' }}>
+																<td>
+																	<strong className="text-primary">#{item.id}</strong>
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	{item.date}
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	{item.created_at 
+																		? moment(item.created_at).format('MMM D, YYYY HH:mm') 
+																		: 'N/A'
+																	}
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	<span className="font-monospace">{item.barcode}</span>
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	<span className={`badge ${item.condition === 'Good' ? 'bg-success' : 'bg-danger'}`}>
+																		{item.condition}
+																	</span>
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	{item.category || 'N/A'}
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	{item.brand || 'N/A'}
+																</td>
+																<td onClick={() => toggleRow(index)}>
+																	{item.model || 'N/A'}
+																</td>
+															</tr>
+														</React.Fragment>
+													))
+												) : (
+													<tr>
+														<td colSpan={8} className="text-center py-4">
+															{returns?.length === 0 ? (
+																<div>
+																	<Icon icon='Inbox' size='3x' className='text-muted mb-3' />
+																	<h5 className="text-muted">No Returns Found</h5>
+																	<p className="text-muted">No return transactions have been recorded yet.</p>
+																</div>
+															) : (
+																<div>
+																	<Icon icon='Search' size='3x' className='text-muted mb-3' />
+																	<h5 className="text-muted">No Matching Results</h5>
+																	<p className="text-muted">
+																		No returns found matching your current filters.
+																		{searchDate && <><br/>Date filter: <strong>{searchDate}</strong></>}
+																		{searchTerm && <><br/>Search term: <strong>"{searchTerm}"</strong></>}
+																	</p>
+																	<Button
+																		color="link"
+																		onClick={clearFilters}
+																		className="p-0">
+																		Clear all filters
+																	</Button>
+																</div>
+															)}
+														</td>
+													</tr>
+												)}
+											</tbody>
+										</table>
+									)}
 								</CardBody>
 							</Card>
 						</div>

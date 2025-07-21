@@ -11,7 +11,6 @@ import Button from '../bootstrap/Button';
 import Select from '../bootstrap/forms/Select';
 import Swal from 'sweetalert2';
 import Checks, { ChecksGroup } from '../bootstrap/forms/Checks';
-import { useUpdateStockInOutMutation } from '../../redux/slices/stockInOutAcceApiSlice';
 import { useGetItemAccesQuery } from '../../redux/slices/itemManagementAcceApiSlice';
 
 interface StockAddModalProps {
@@ -19,6 +18,7 @@ interface StockAddModalProps {
 	isOpen: boolean;
 	setIsOpen(...args: unknown[]): unknown;
 	quantity: any;
+	refetch: () => void;
 }
 
 const formatTimestamp = (seconds: number, nanoseconds: number): string => {
@@ -43,10 +43,9 @@ interface StockOut {
 	category: string;
 	quantity: string;
 	date: string;
-	customerName: string;
+	name: string;
 	mobile: string;
 	nic: string;
-	email: string;
 	barcode: string;
 	cost: string;
 	sellingPrice: string;
@@ -55,7 +54,7 @@ interface StockOut {
 	description: string;
 }
 
-const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity }) => {
+const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity, refetch }) => {
 	const [stockOut, setStockOut] = useState<StockOut>({
 		cid: '',
 		model: '',
@@ -63,10 +62,9 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		category: '',
 		quantity: '',
 		date: '',
-		customerName: '',
+		name: '',
 		mobile: '',
 		nic: '',
-		email: '',
 		barcode: '',
 		cost: '',
 		sellingPrice: '',
@@ -75,6 +73,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		description: '',
 	});
 	const [selectedCost, setSelectedCost] = useState<string | null>(null);
+	const [barcodeSearch, setBarcodeSearch] = useState<string>('');
 	const {
 		data: stockInData,
 		isLoading: stockInLoading,
@@ -82,8 +81,6 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 	} = useGetStockInOutsQuery(undefined);
 	const [addstockOut] = useAddStockOutMutation();
 	const { data: stockOutData, isSuccess } = useGetItemAcceByIdQuery(id);
-	const [updateStockInOut] = useUpdateStockInOutMutation();
-	const { refetch } = useGetItemAccesQuery(undefined);
 
 	useEffect(() => {
 		if (isSuccess && stockOutData) {
@@ -91,16 +88,22 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		}
 	}, [isSuccess, stockOutData]);
 
+	// Filter for accessory stock-in items only
 	const filteredStockIn = stockInData?.filter(
-		(item: { stock: string }) => item.stock === 'stockIn',
+		(item: { stock: string; type: string }) => 
+			item.stock === 'stockIn' && item.type === 'Accessory',
 	);
-	const handleDateInChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-	const selectedBarcode = e.target.value;
-	formik.setFieldValue("barcode", selectedBarcode);
-	const selectedStock = filteredStockIn?.find(
-		(item: { barcode: string }) => item.barcode === selectedBarcode
+
+	const handleBarcodeSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const searchValue = e.target.value;
+		setBarcodeSearch(searchValue);
+		formik.setFieldValue("barcode", searchValue);
+		
+		// Check if typed value matches any barcode exactly
+		const matchedStock = filteredStockIn?.find(
+			(item: { barcode: string }) => item.barcode === searchValue
 	);
-	setSelectedCost(selectedStock ? selectedStock.cost : null);
+		setSelectedCost(matchedStock ? matchedStock.cost : null);
 };
 
 	const stockInQuantity = quantity;
@@ -112,10 +115,9 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 			category: stockOut.category,
 			quantity: '',
 			date: '',
-			customerName: '',
+			name: '',
 			mobile: '',
 			nic: '',
-			email: '',
 			barcode: '',
 			cost: '',
 			sellingPrice: '',
@@ -126,34 +128,46 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		enableReinitialize: true,
 		validate: (values) => {
 			const errors: any = {};
-			if (!values.quantity) errors.quantity = 'Quantity is required';
+			if (!values.quantity || values.quantity === '') {
+				errors.quantity = 'Quantity is required';
+			} else if (isNaN(Number(values.quantity)) || Number(values.quantity) <= 0) {
+				errors.quantity = 'Quantity must be a positive number';
+			}
+			
 			if (!values.date) errors.date = 'Date Out is required';
 			if (!values.barcode) errors.barcode = 'Date In is required';
-			if (!values.sellingPrice) errors.sellingPrice = 'Selling Price is required';
-			// if (!values.customerName) errors.customerName = 'Customer Name is required';
-			// if (!values.mobile) {
-			// 	errors.mobile = 'Required';
-			// } else if (values.mobile.length !== 10) {
-			// 	errors.mobile = 'Mobile number must be exactly 10 digits';
-			// }
-			// if (!values.nic) {
-			// 	errors.nic = 'Required';
-			// } else if (!/^\d{9}[Vv]$/.test(values.nic) && !/^\d{12}$/.test(values.nic)) {
-			// 	errors.nic = 'NIC must be 9 digits followed by "V" or 12 digits';
-			// }
-			// if (!values.email) {
-			// 	errors.email = 'Required';
-			// } else if (!values.email.includes('@')) {
-			// 	errors.email = 'Invalid email format.';
-			// } else if (values.email.includes(' ')) {
-			// 	errors.email = 'Email should not contain spaces.';
-			// } else if (/[A-Z]/.test(values.email)) {
-			// 	errors.email = 'Email should be in lowercase only.';
-			// }
+			
+			if (!values.sellingPrice || values.sellingPrice === '') {
+				errors.sellingPrice = 'Selling Price is required';
+			} else if (isNaN(Number(values.sellingPrice)) || Number(values.sellingPrice) < 0) {
+				errors.sellingPrice = 'Selling Price must be a non-negative number';
+			}
+			
 			return errors;
 		},
 		onSubmit: async (values) => {
 			try {
+				// Check if current stock is zero
+				if (stockInQuantity <= 0) {
+					Swal.fire({
+						icon: 'error',
+						title: 'No Stock Available',
+						text: 'Current stock is 0. Stock out operation cannot be performed.',
+					});
+					return;
+				}
+				
+				// Check if requested quantity exceeds available stock
+				const stockOutQuantity = values.quantity ? parseInt(values.quantity) : 0;
+				if (stockOutQuantity > stockInQuantity) {
+					Swal.fire({
+						icon: 'error',
+						title: 'Insufficient Stock',
+						text: `Requested quantity (${stockOutQuantity}) exceeds available stock (${stockInQuantity}).`,
+					});
+					return;
+				}
+			
 				Swal.fire({
 					title: 'Processing...',
 					html: 'Please wait while the data is being processed.<br><div class="spinner-border" role="status"></div>',
@@ -162,7 +176,8 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 					showConfirmButton: false,
 				});
 				await refetch();
-				const stockOutQuantity = values.quantity ? parseInt(values.quantity) : 0;
+				
+				// Validate and convert numeric values
 				if (isNaN(stockInQuantity) || isNaN(stockOutQuantity)) {
 					Swal.fire({
 						icon: 'error',
@@ -171,6 +186,17 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 					});
 					return;
 				}
+				
+				// Ensure sellingPrice is a number
+				if (values.sellingPrice === '' || isNaN(Number(values.sellingPrice))) {
+					Swal.fire({
+						icon: 'error',
+						title: 'Invalid Selling Price',
+						text: 'Selling Price must be a valid number.',
+					});
+					return;
+				}
+				
 				const updatedQuantity = stockInQuantity - stockOutQuantity;
 				if (updatedQuantity < 0) {
 					Swal.fire({
@@ -180,13 +206,27 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 					});
 					return;
 				}
-				const response = await addstockOut(values).unwrap();
-				await updateStockInOut({ id, quantity: updatedQuantity }).unwrap();
-				refetch();
+				
+				// Clone values and ensure numeric fields are properly formatted
+				const processedValues = {
+					...values,
+					quantity: Number(values.quantity),
+					sellingPrice: Number(values.sellingPrice),
+					cost: values.cost ? Number(values.cost) : null,
+					stock: 'stockOut',
+					status: true
+				};
+				
+				console.log("Submitting stock-out with values:", processedValues);
+				
+				const response = await addstockOut(processedValues).unwrap();
+				console.log("Stock-out created response:", response);
+				await refetch();
 				await Swal.fire({ icon: 'success', title: 'Stock Out Created Successfully' });
 				formik.resetForm();
 				setIsOpen(false);
 			} catch (error) {
+				console.error('Stock out error:', error);
 				await Swal.fire({
 					icon: 'error',
 					title: 'Error',
@@ -208,6 +248,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 				setIsOpen={() => {
 					setIsOpen(false);
 					setSelectedCost(null);
+					setBarcodeSearch('');
 					formik.resetForm();
 				}}
 				className='p-4'>
@@ -256,19 +297,21 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 						/>
 					</FormGroup>
 					<FormGroup id='barcode' label='Barcode' className='col-md-6'>
-						<Select
-							id='barcode'
-							name='barcode'
-							ariaLabel='barcode'
-							onChange={handleDateInChange}
-							value={formik.values.barcode}
-							onBlur={formik.handleBlur}
+						<input
+							type='text'
 							className={`form-control ${
 								formik.touched.barcode && formik.errors.barcode ? 'is-invalid' : ''
-							}`}>
-							<option value=''>Select a Barcode</option>
-							{stockInLoading && <option>Loading barcodes...</option>}
-							{stockInError && <option>Error fetching barcodes</option>}
+							}`}
+							list='barcode-options'
+							placeholder='Type or select barcode'
+							value={formik.values.barcode}
+							onChange={handleBarcodeSearchChange}
+							onBlur={formik.handleBlur}
+							name='barcode'
+						/>
+						<datalist id='barcode-options'>
+							{stockInLoading && <option value=''>Loading barcodes...</option>}
+							{stockInError && <option value=''>Error fetching barcodes</option>}
 							{filteredStockIn?.map(
 								(
 									item: {
@@ -277,16 +320,16 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 									},
 									index: any,
 								) => (
-									<option key={index} value={item.barcode}>
-										{item.barcode}
-									</option>
+									<option key={index} value={item.barcode} />
 								),
 							)}
-							{formik.touched.barcode && formik.errors.barcode && (
-								<div className='invalid-feedback'>{formik.errors.barcode}</div>
-							)}
-						</Select>
+						</datalist>
 					</FormGroup>
+					{formik.touched.barcode && formik.errors.barcode && (
+						<div className='col-md-6'>
+							<div className='invalid-feedback d-block'>{formik.errors.barcode}</div>
+						</div>
+					)}
 
 					{selectedCost && (
 						<FormGroup id='cost' label='Cost(Per Unit)' className='col-md-6'>

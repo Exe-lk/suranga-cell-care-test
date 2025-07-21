@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import type { NextPage } from 'next';
 import useDarkMode from '../../../hooks/useDarkMode';
 import PageWrapper from '../../../layout/PageWrapper/PageWrapper';
@@ -14,6 +14,7 @@ import Page from '../../../layout/Page/Page';
 import Card, { CardBody, CardTitle } from '../../../components/bootstrap/Card';
 import UserAddModal from '../../../components/custom/technicianAddModal';
 import UserEditModal from '../../../components/custom/technicianEditModal';
+import TechnicianStockOutModal from '../../../components/custom/technicianStockOutModal';
 import { doc, deleteDoc, collection, getDocs, updateDoc, query, where } from 'firebase/firestore';
 import { firestore } from '../../../firebaseConfig';
 import Dropdown, { DropdownToggle, DropdownMenu } from '../../../components/bootstrap/Dropdown';
@@ -40,11 +41,14 @@ import PaginationButtons, {
 const Index: NextPage = () => {
 	const { darkModeStatus } = useDarkMode();
 	const [searchTerm, setSearchTerm] = useState('');
+	const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
 	const [addModalStatus, setAddModalStatus] = useState<boolean>(false);
 	const [editModalStatus, setEditModalStatus] = useState<boolean>(false);
 	const [deleteModalStatus, setDeleteModalStatus] = useState<boolean>(false);
+	const [stockOutModalStatus, setStockOutModalStatus] = useState<boolean>(false);
+	const [selectedTechnician, setSelectedTechnician] = useState<any>(null);
 	const [id, setId] = useState<string>('');
-	const { data: technicians, error, isLoading } = useGetTechniciansQuery(undefined);
+	const { data: technicians, error, isLoading } = useGetTechniciansQuery(debouncedSearchTerm);
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [perPage, setPerPage] = useState<number>(PER_COUNT['10000']);
 	const [updateTechnician] = useUpdateTechnicianMutation();
@@ -76,6 +80,11 @@ const Index: NextPage = () => {
 			console.error('Error deleting document: ', error);
 			Swal.fire('Error', 'Failed to delete Technician.', 'error');
 		}
+	};
+
+	const handleViewStockOut = (technician: any) => {
+		setSelectedTechnician(technician);
+		setStockOutModalStatus(true);
 	};
 
 	const handleExport = async (format: string) => {
@@ -311,6 +320,23 @@ const Index: NextPage = () => {
 		}
 	}, [technicians]);
 
+	// Debounce search term to minimize API calls
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setDebouncedSearchTerm(searchTerm);
+			// This will trigger a new API call with the updated search term
+			// Search is performed directly on the database rather than client-side filtering
+		}, 500);
+
+		return () => clearTimeout(timer);
+	}, [searchTerm]);
+
+	// Handle search input changes
+	const handleSearch = (event: React.ChangeEvent<HTMLInputElement>) => {
+		const value = event.target.value;
+		setSearchTerm(value);
+	};
+
 	return (
 		<PageWrapper>
 			<SubHeader>
@@ -324,10 +350,8 @@ const Index: NextPage = () => {
 						id='searchInput'
 						type='search'
 						className='border-0 shadow-none bg-transparent'
-						placeholder='Search...'
-						onChange={(event: any) => {
-							setSearchTerm(event.target.value);
-						}}
+						placeholder='Search by name, ID, type or mobile number...'
+						onChange={handleSearch}
 						value={searchTerm}
 						ref={inputRef}
 					/>
@@ -400,6 +424,9 @@ const Index: NextPage = () => {
 													searchTerm
 														? technician.name
 																.toLowerCase()
+																.includes(searchTerm.toLowerCase()) ||
+														  technician.technicianNum
+																.toLowerCase()
 																.includes(searchTerm.toLowerCase())
 														: true,
 												)
@@ -410,6 +437,12 @@ const Index: NextPage = () => {
 														<td>{technician.type}</td>
 														<td>{technician.mobileNumber}</td>
 														<td>
+															<Button
+																icon='Visibility'
+																color='info'
+																onClick={() => handleViewStockOut(technician)}>
+																View
+															</Button>
 															<Button
 																icon='Edit'
 																color='primary'
@@ -455,6 +488,12 @@ const Index: NextPage = () => {
 			<UserAddModal setIsOpen={setAddModalStatus} isOpen={addModalStatus} id='' />
 			<UserEditModal setIsOpen={setEditModalStatus} isOpen={editModalStatus} id={id} />
 			<SellerDeleteModal setIsOpen={setDeleteModalStatus} isOpen={deleteModalStatus} id='' />
+			<TechnicianStockOutModal
+				setIsOpen={setStockOutModalStatus}
+				isOpen={stockOutModalStatus}
+				technicianId={selectedTechnician?.technicianNum || ''}
+				technicianName={selectedTechnician?.name || ''}
+			/>
 		</PageWrapper>
 	);
 };

@@ -12,15 +12,17 @@ import { useGetItemAccesQuery } from '../../redux/slices/itemManagementAcceApiSl
 import { useUpdateStockInOutMutation } from '../../redux/slices/stockInOutAcceApiSlice';
 import { useGetStockInOutsQuery } from '../../redux/slices/stockInOutAcceApiSlice';
 import { useGetSuppliersQuery } from '../../redux/slices/supplierApiSlice';
+import { useGetDealersQuery } from '../../redux/slices/delearApiSlice';
+import { useUpdateItemAcceMutation } from '../../redux/slices/itemManagementAcceApiSlice';
 import Select from '../bootstrap/forms/Select';
-import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage';
-import { storage } from '../../firebaseConfig';
+import { supabase } from '../../lib/supabase';
 
 interface StockAddModalProps {
 	id: string;
 	isOpen: boolean;
 	setIsOpen(...args: unknown[]): unknown;
 	quantity: any;
+	refetch: () => void;
 }
 
 interface StockIn {
@@ -45,7 +47,7 @@ interface StockIn {
 	imi: string;
 }
 
-const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity }) => {
+const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity, refetch }) => {
 	const [stockIn, setStockIn] = useState<StockIn>({
 		id: '',
 		brand: '',
@@ -75,78 +77,109 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 	const { data: stockInData, isSuccess } = useGetItemAcceByIdQuery(id);
 	const [addstockIn, { isLoading }] = useAddStockInMutation();
 	const [updateStockInOut] = useUpdateStockInOutMutation();
-	const { refetch } = useGetItemAccesQuery(undefined);
+	const [updateItemAcce] = useUpdateItemAcceMutation();
 	const { data: stockInOuts } = useGetStockInOutsQuery(undefined);
 	const [generatedCode, setGeneratedCode] = useState('');
 	const [generatedbarcode, setGeneratedBarcode] = useState<any>();
+	const [stockInCode, setStockInCode] = useState(''); // New state for 6-digit stock-in code
 	const nowQuantity = quantity;
 	const [imageurl, setImageurl] = useState<any>(null);
+	const { data: dealers } = useGetDealersQuery(undefined);
+
+	// Function to generate 6-digit stock-in code sequentially
+	const generateStockInCode = (existingStockInOuts: any[]) => {
+		if (!existingStockInOuts || existingStockInOuts.length === 0) {
+			return 100000; // Start from 100000 if no existing records
+		}
+
+		// Find the highest 6-digit code from existing stock-in records
+		const existingCodes = existingStockInOuts
+			.filter((item: any) => item.stock === 'stockIn' && item.code)
+			.map((item: any) => {
+				const code = item.code?.toString() || '';
+				// Extract numeric part - handle both pure numbers and codes with prefixes
+				const numericMatch = code.match(/\d+$/);
+				return numericMatch ? parseInt(numericMatch[0], 10) : 0;
+			})
+			.filter((code: number) => code >= 100000 && code <= 999999); // Only consider 6-digit codes
+
+		if (existingCodes.length === 0) {
+			return 100000; // Start from 100000 if no valid 6-digit codes found
+		}
+
+		const maxCode = Math.max(...existingCodes);
+		const nextCode = maxCode + 1;
+		
+		// Ensure it's a 6-digit number
+		if (nextCode > 999999) {
+			throw new Error('Maximum 6-digit code reached (999999)');
+		}
+		
+		return nextCode;
+	};
 
 	useEffect(() => {
+		console.log("=== BARCODE GENERATION DEBUG START ===");
+		console.log("isSuccess:", isSuccess);
+		console.log("stockInData:", stockInData);
+		console.log("stockInData.code:", stockInData?.code);
+		
 		if (isSuccess && stockInData) {
 			setStockIn(stockInData);
+			// Use the item's existing code column value for item code
+			setGeneratedCode(stockInData.code);
+			// Generate a new sequential 6-digit code for stock-in
+			const newStockInCode = generateStockInCode(stockInOuts || []);
+			setStockInCode(newStockInCode.toString());
+			console.log("Using item's code from database:", stockInData.code);
+			console.log("Generated sequential 6-digit stock-in code:", newStockInCode);
 		}
-		if (stockInOuts?.length) {
-			const lastCode = stockInOuts
-				.map((item: { code: string }) => item.code)
-				.filter((code: string) => code)
-				.reduce((maxCode: string, currentCode: string) => {
-					const currentNumericPart = parseInt(currentCode.replace(/\D/g, ''), 10);
-					const maxNumericPart = parseInt(maxCode.replace(/\D/g, ''), 10);
-					return currentNumericPart > maxNumericPart ? currentCode : maxCode;
-				}, '100000');
-			const newCode = incrementCode(lastCode);
-			setGeneratedCode(newCode);
-		} else {
-			setGeneratedCode('100000');
-			setGeneratedBarcode('1000100000');
-		}
-	}, [isSuccess, stockInData, stockInOuts, isOpen]);
-
-	const incrementCode = (code: string) => {
-		const numericPart = parseInt(code.replace(/\D/g, ''), 10);
-		const incrementedNumericPart = (numericPart + 1).toString().padStart(5, '0');
-		const barcode = (numericPart + 1).toString().padStart(10, '0');
-		const value = `${stockInData?.code}${incrementedNumericPart}`;
-		setGeneratedBarcode(value);
-		return incrementedNumericPart;
-	};
+		
+		console.log("=== BARCODE GENERATION DEBUG END ===");
+	}, [isSuccess, stockInData, isOpen, stockInOuts]);
 
 	const handleUploadimage = async () => {
 		if (imageurl) {
-			// Assuming generatePDF returns a Promise
-			const pdfFile = imageurl;
-			console.log(imageurl);
-			const storageRef = ref(storage, `nic/${pdfFile.name}`);
-			const uploadTask = uploadBytesResumable(storageRef, pdfFile);
-
-			return new Promise((resolve, reject) => {
-				uploadTask.on(
-					'state_changed',
-					(snapshot) => {
-						const progress1 = Math.round(
-							(snapshot.bytesTransferred / snapshot.totalBytes) * 100,
-						);
-					},
-					(error) => {
-						console.error(error.message);
-						reject(error.message);
-					},
-					() => {
-						getDownloadURL(uploadTask.snapshot.ref)
-							.then((url) => {
-								console.log('File uploaded successfully. URL:', url);
-
-								console.log(url);
-								resolve(url); // Resolve the Promise with the URL
-							})
-							.catch((error) => {
-								console.error(error.message);
-								reject(error.message);
-							});
-					},
-				);
+			// Showing upload progress
+			Swal.fire({
+				title: 'Uploading NIC image...',
+				html: 'Please wait while your image is being uploaded.<br><div class="spinner-border" role="status"></div>',
+				allowOutsideClick: false,
+				showCancelButton: false,
+				showConfirmButton: false,
 			});
+			
+			try {
+				const pdfFile = imageurl;
+				console.log("Uploading image:", pdfFile.name);
+				
+				// Generate unique filename with timestamp
+				const fileName = `${pdfFile.name}_${Date.now()}`;
+				const filePath = `nic/${fileName}`;
+				
+				// Upload to Supabase Storage
+				const { data, error } = await supabase.storage
+					.from('nics') // Using the 'nics' bucket
+					.upload(filePath, pdfFile);
+
+				if (error) {
+					console.error("Upload error:", error.message);
+					throw new Error(error.message);
+				}
+
+				// Get public URL
+				const { data: urlData } = supabase.storage
+					.from('nics')
+					.getPublicUrl(filePath);
+
+				const publicUrl = urlData.publicUrl;
+				console.log('File uploaded successfully. URL:', publicUrl);
+				return publicUrl;
+				
+			} catch (error: any) {
+				console.error("Upload failed:", error.message);
+				throw error;
+			}
 		} else {
 			return '';
 		}
@@ -171,7 +204,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 			stock: 'stockIn',
 			status: true,
 			sellingPrice: 0,
-			barcode: generatedbarcode,
+			barcode: '',
 			imi: '',
 			cid: stockIn.id || '',
 			suppName: '',
@@ -246,48 +279,116 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		},
 		onSubmit: async (values) => {
 			try {
-				const process = Swal.fire({
+				console.log("=== FORM SUBMISSION DEBUG START ===");
+				console.log("Generated barcode value:", generatedbarcode);
+				console.log("Form values barcode:", values.barcode);
+				console.log("All form values:", values);
+				
+				// Show processing modal
+				Swal.fire({
 					title: 'Processing...',
 					html: 'Please wait while the data is being processed.<br><div class="spinner-border" role="status"></div>',
 					allowOutsideClick: false,
 					showCancelButton: false,
 					showConfirmButton: false,
 				});
-
-				const finalValues = {
-					...values,
-					quantity: values.type === 'Mobile' ? '1' : values.quantity,
-					cid: stockIn.id,
-				};
-
+				
+				// 1. Upload image if provided
+				let url = '';
 				try {
-					// const imgurl: any = await handleUploadimage();
-					const updatedQuantity = parseInt(nowQuantity) + parseInt(finalValues.quantity);
-					const response: any = await addstockIn({
-						...finalValues,
-						code: generatedCode,
-						barcode: generatedbarcode,
-						sellingPrice: Number(values.sellingPrice),
-						// NIC_Photo: imgurl,
-					}).unwrap();
-					await updateStockInOut({ id, quantity: updatedQuantity }).unwrap();
-					refetch();
+					if (imageurl) {
+						console.log("Starting image upload");
+						url = (await handleUploadimage()) as string;
+						console.log("Image upload completed:", url);
+					}
+				} catch (uploadError) {
+					console.error("Image upload failed:", uploadError);
+					Swal.fire({
+						icon: 'error',
+						title: 'Image Upload Failed',
+						text: `Could not upload the NIC image: ${uploadError}`,
+					});
+					return; // Stop the submission process
+				}
+				
+				// 2. Prepare data for API - Use the 6-digit stock-in code
+				const submissionData = {
+					...values,
+					code: stockInCode, // Use the 6-digit stock-in code instead of item code
+					barcode: `${generatedCode}${stockInCode}`, // Use 4-digit item code + 6-digit stock-in code
+					NIC_Photo: url,
+				};
+				
+				console.log("=== SUBMISSION WITH 6-DIGIT CODE ===");
+				console.log("6-digit stock-in code:", stockInCode);
+				console.log("Item's original code (4 digits):", generatedCode);
+				console.log("Generated barcode (4+6 digits):", submissionData.barcode);
+				
+				try {
+					// 3. Add the stock-in record with the 6-digit code
+					console.log("Sending to API:", submissionData);
+					const response = await addstockIn(submissionData).unwrap();
+					console.log("=== API RESPONSE ===");
+					console.log("Stock in response:", response);
+					
+					// 4. The barcode is already correct, no need to update it
+					console.log("=== FINAL BARCODE GENERATION ===");
+					console.log("Stockin ID:", response);
+					console.log("6-digit Stock-in Code:", stockInCode);
+					console.log("Final barcode:", submissionData.barcode);
+					
+					// 5. Update the item quantity in ItemManagementAcce table
+					if (stockIn?.id) {
+						const currentQuantity = parseInt(stockIn.quantity || '0', 10);
+						const addedQuantity = parseInt(values.quantity || '0', 10);
+						const newQuantity = (currentQuantity + addedQuantity).toString();
+						
+						console.log(`Updating quantity from ${currentQuantity} to ${newQuantity}`);
+						
+						// Call the correct API to update the item quantity in ItemManagementAcce table
+						await updateItemAcce({
+							id: stockIn.id,
+							type: stockIn.type,
+							mobileType: stockIn.mobileType,
+							category: stockIn.category,
+							model: stockIn.model,
+							quantity: newQuantity,
+							brand: stockIn.brand,
+							code: stockIn.code,
+							status: stockIn.status,
+						});
+					}
+					
+					// 6. Refresh data and show success
+					await refetch();
 					await Swal.fire({
 						icon: 'success',
-						title: 'Stock In Created Successfully',
+						title: 'Stock In Added Successfully',
+						text: `Barcode: ${submissionData.barcode}`,
 					});
 					formik.resetForm();
 					setIsOpen(false);
-				} catch (error) {
+					console.log("=== FORM SUBMISSION DEBUG END ===");
+				} catch (apiError: any) {
+					// Handle API errors
+					console.error('=== API ERROR ===');
+					console.error('Error during stock in API call:', apiError);
+					console.error('API error details:', apiError.data);
 					await Swal.fire({
 						icon: 'error',
 						title: 'Error',
-						text: 'Failed to add the item. Please try again.',
+						text: apiError.data?.error || 'Failed to add stock in. Please try again.',
 					});
 				}
 			} catch (error) {
-				console.error('Error during handleUpload: ', error);
-				alert('An error occurred during the process. Please try again later.');
+				// Handle any other errors
+				console.error('=== UNEXPECTED ERROR ===');
+				console.error('Unexpected error during stock in:', error);
+				await Swal.fire({
+					icon: 'error',
+					title: 'Error',
+					text: 'An unexpected error occurred. Please try again.',
+				});
 			}
 		},
 	});
@@ -310,10 +411,19 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 			</ModalHeader>
 			<ModalBody className='px-4'>
 				<div className='row g-4'>
-					<FormGroup id='code' label='Generated Code' className='col-md-6'>
+					<FormGroup id='code' label='Stock-In Code (6 digits)' className='col-md-6'>
 						<Input
 							type='text'
-							value={generatedbarcode}
+							value={stockInCode || 'Generating...'}
+							readOnly
+							isValid={formik.isValid}
+							isTouched={formik.touched.code}
+						/>
+					</FormGroup>
+					<FormGroup id='itemCode' label='Item Code' className='col-md-6'>
+						<Input
+							type='text'
+							value={generatedCode || 'Loading...'}
 							readOnly
 							isValid={formik.isValid}
 							isTouched={formik.touched.code}
@@ -470,18 +580,16 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 					<FormGroup
 						id='quantity'
 						label='Quantity'
-						className={`col-md-6 ${formik.values.type === 'Mobile' ? 'd-none' : ''}`}>
+						className='col-md-6'>
 						<Input
 							type='number'
-							value={formik.values.type === 'Mobile' ? 1 : formik.values.quantity}
+							value={formik.values.quantity}
 							onChange={formik.handleChange}
 							onBlur={formik.handleBlur}
-							isValid={formik.isValid && formik.values.type !== 'Mobile'}
+							isValid={formik.isValid}
 							isTouched={formik.touched.quantity}
 							invalidFeedback={formik.errors.quantity}
 							validFeedback='Looks good!'
-							readOnly={formik.values.type === 'Mobile'}
-							className={formik.values.type === 'Mobile' ? 'd-none' : ''}
 							min={1}
 						/>
 					</FormGroup>
@@ -707,6 +815,35 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 							</Select>
 							{formik.touched.category && formik.errors.category ? (
 								<div className='invalid-feedback'>{formik.errors.category}</div>
+							) : (
+								<></>
+							)}
+						</FormGroup>
+					)}
+
+					{formik.values.type === 'Accessory' && (
+						<FormGroup id='dealerName' label='Dealer Name' className='col-md-6'>
+							<Select
+								id='dealerName'
+								name='dealerName'
+								ariaLabel='dealerName'
+								onChange={formik.handleChange}
+								value={formik.values.dealerName}
+								onBlur={formik.handleBlur}
+								className={`form-control ${
+									formik.touched.dealerName && formik.errors.dealerName
+										? 'is-invalid'
+										: ''
+								}`}>
+								<option value=''>Select a Dealer</option>
+								{dealers?.map((dealer: { id: string; name: string }) => (
+									<option key={dealer.id} value={dealer.name}>
+										{dealer.name}
+									</option>
+								))}
+							</Select>
+							{formik.touched.dealerName && formik.errors.dealerName ? (
+								<div className='invalid-feedback'>{formik.errors.dealerName}</div>
 							) : (
 								<></>
 							)}

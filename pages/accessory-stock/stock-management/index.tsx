@@ -14,7 +14,7 @@ import { toPng, toSvg } from 'html-to-image';
 import { DropdownItem } from '../../../components/bootstrap/Dropdown';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { useGetStockInOutByDateQuery, useGetStockInOutsQuery } from '../../../redux/slices/stockInOutAcceApiSlice';
+import { useGetAllStockRecordsQuery } from '../../../redux/slices/stockInOutAcceApiSlice';
 import PaginationButtons, {
 	dataPagination,
 	PER_COUNT,
@@ -25,27 +25,76 @@ const Index: NextPage = () => {
 	const [searchTerm, setSearchTerm] = useState('');
 	const [selectedDate, setSelectedDate] = useState('');
 	const today = new Date();
-	const [startDate, setStartDate] = useState<string>(today.toISOString().split('T')[0]);
-	const { data: StockInOuts, error, isLoading } = useGetStockInOutByDateQuery(startDate);
+	const [startDate, setStartDate] = useState<string>('');
+	
+	// Use our query to get ALL records - search works independently of date
+	const { data: StockInOuts, error, isLoading } = useGetAllStockRecordsQuery(undefined);
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [perPage, setPerPage] = useState<number>(PER_COUNT['10000']);
+
+	// Define stock types for filtering
+	const stock = [
+		{ stock: 'stockIn', label: 'Stock In' }, 
+		{ stock: 'stockOut', label: 'Stock Out' }
+	];
+	// Start with both stock types selected
+	const [selectedUsers, setSelectedUsers] = useState<string[]>(['stockIn', 'stockOut']);
+
+	// Debug stock types
+	useEffect(() => {
+		if (StockInOuts) {
+			console.log("Total stock records:", StockInOuts.length);
+			const stockTypes = StockInOuts.map((item: any) => item.stock).filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+			console.log("Stock types in data:", stockTypes);
+			const stockOutCount = StockInOuts.filter((item: any) => item.stock === 'stockOut').length;
+			const stockInCount = StockInOuts.filter((item: any) => item.stock === 'stockIn').length;
+			console.log("Stock-out records count:", stockOutCount);
+			console.log("Stock-in records count:", stockInCount);
+		}
+	}, [StockInOuts]);
+
 	console.log(StockInOuts)
 	const [endDate, setEndDate] = useState<string>('');
-	const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 	const inputRef = useRef<HTMLInputElement>(null);
-	const stock = [{ stock: 'stockOut' }, { stock: 'stockIn' }];
 
+	// Improved filtering logic - search works independently, date is optional
 	const filteredTransactions = StockInOuts?.filter((trans: any) => {
-		const transactionDate = new Date(trans.date);
-		const start = startDate ? new Date(startDate) : null;
-		const end = endDate ? new Date(endDate) : null;
-		if (start && end) {
-			return transactionDate >= start && transactionDate <= end;
-		} else if (start) {
-			return transactionDate >= start;
-		} else if (end) {
-			return transactionDate <= end;
+		// First filter by active status
+		if (!trans.status) return false;
+		
+		// Apply stock type filtering
+		if (selectedUsers.length > 0 && !selectedUsers.includes(trans.stock)) {
+			return false;
 		}
+		
+		// Apply search term filtering (independent of date)
+		if (searchTerm) {
+			const search = searchTerm.toLowerCase();
+			const matchesSearch = (
+				trans.barcode?.toString().toLowerCase().includes(search) ||
+				trans.brand?.toLowerCase().includes(search) ||
+				trans.model?.toLowerCase().includes(search) ||
+				(trans.brand + ' ' + trans.model)?.toLowerCase().includes(search) ||
+				(trans.category + " " + trans.brand + " " + trans.model)?.toLowerCase().includes(search) ||
+				(trans.category + " " + trans.model + " " + trans.brand)?.toLowerCase().includes(search) ||
+				trans.category?.toLowerCase().includes(search) ||
+				trans.stock?.toLowerCase().includes(search) ||
+				trans.description?.toLowerCase().includes(search)
+			);
+			if (!matchesSearch) return false;
+		}
+		
+		// Apply date filtering ONLY if a date is selected (optional)
+		if (startDate && startDate.trim() !== '') {
+			const transactionDate = trans.date ? new Date(trans.date) : null;
+			const start = new Date(startDate);
+			
+			// Skip records without a date or with an invalid date when date filter is active
+			if (!transactionDate) return false;
+			
+			if (transactionDate < start) return false;
+		}
+		
 		return true;
 	});
 
@@ -248,7 +297,7 @@ const Index: NextPage = () => {
 						id='searchInput'
 						type='search'
 						className='border-0 shadow-none bg-transparent'
-						placeholder='Search...'
+						placeholder='Search by barcode, brand, model, category, stock type, or description...'
 						onChange={(event: any) => setSearchTerm(event.target.value)}
 						value={searchTerm}
 						ref={inputRef}
@@ -267,41 +316,51 @@ const Index: NextPage = () => {
 							<div className='container py-2'>
 								<div className='row g-3'>
 									<ChecksGroup>
-										{stock.map((brand, index) => (
+										{stock.map((stockItem, index) => (
 											<Checks
-												key={brand.stock}
-												id={brand.stock}
-												label={brand.stock}
-												name={brand.stock}
-												value={brand.stock}
-												checked={selectedUsers.includes(brand.stock)}
+												key={stockItem.stock}
+												id={stockItem.stock}
+												label={stockItem.label}
+												name={stockItem.stock}
+												value={stockItem.stock}
+												checked={selectedUsers.includes(stockItem.stock)}
 												onChange={(event: any) => {
 													const { checked, value } = event.target;
 													setSelectedUsers((prevUsers) =>
 														checked
 															? [...prevUsers, value]
 															: prevUsers.filter(
-																	(brand) => brand !== value,
+																	(type) => type !== value,
 															  ),
 													);
 												}}
 											/>
 										))}
 									</ChecksGroup>
-									<FormGroup label='Date' className='col-6'>
+									<FormGroup label='Date Filter (Optional)' className='col-6'>
 										<Input
 											type='date'
 											onChange={(e: any) => setStartDate(e.target.value)}
 											value={startDate}
+											placeholder='Filter by start date (optional)'
 										/>
 									</FormGroup>
-									{/* <FormGroup label='End Date' className='col-6'>
-										<Input
-											type='date'
-											onChange={(e: any) => setEndDate(e.target.value)}
-											value={endDate}
-										/>
-									</FormGroup> */}
+									<div className='col-12 mt-3'>
+										<Button 
+											color='info' 
+											className='w-100'
+											onClick={() => {
+												setSelectedUsers(['stockIn', 'stockOut']);
+												setStartDate('');
+												setSearchTerm('');
+												if (inputRef.current) {
+													inputRef.current.value = '';
+												}
+											}}
+										>
+											Clear All Filters & Search
+										</Button>
+									</div>
 								</div>
 							</div>
 						</DropdownMenu>
@@ -349,6 +408,7 @@ const Index: NextPage = () => {
 											<th>Model</th>
 											<th>Quantity</th>
 											<th>Selling Price</th>
+											<th>Cost</th>
 											<th>Description</th>
 											<th>Stock</th>
 										</tr>
@@ -356,64 +416,80 @@ const Index: NextPage = () => {
 									<tbody>
 										{isLoading && (
 											<tr>
-												<td>Loading...</td>
+												<td colSpan={10}>Loading...</td>
 											</tr>
 										)}
 										{error && (
 											<tr>
-												<td>Error fetching stocks.</td>
+												<td colSpan={10}>Error fetching stocks.</td>
 											</tr>
 										)}
-										{filteredTransactions &&
+										{filteredTransactions && filteredTransactions.length > 0 ? (
+											// Sort records by date (newest first) and paginate
 											dataPagination(
-												filteredTransactions,
+												filteredTransactions.sort((a: any, b: any) => {
+													const dateA = a.created_at ? new Date(a.created_at).getTime() : 0;
+													const dateB = b.created_at ? new Date(b.created_at).getTime() : 0;
+													return dateB - dateA;
+												}),
 												currentPage,
 												perPage,
-											)
-												.filter(
-													(StockInOut: any) => StockInOut.status === true,
-												)
+											).map((brand: any, index: any) => {
+												const formattedTimestamp = brand.created_at 
+													? new Date(brand.created_at).toLocaleString() 
+													: 'No timestamp';
 
-												.filter((brand: any) => {
-													const search = searchTerm.toLowerCase();
-													return (
-														brand.barcode?.toString().toLowerCase().includes(search) ||
-														brand.brand?.toLowerCase().includes(search) ||
-														brand.model?.toLowerCase().includes(search)||
-														(brand.brand + ' ' + brand.model)?.toLowerCase().includes(search) ||
-														(brand.category+" "+brand.brand+" "+brand.model)?.toLowerCase().includes(search) ||
-														(brand.category+" "+brand.model+" "+brand.brand)?.toLowerCase().includes(search) ||
-														brand.category?.toLowerCase().includes(search)
-													);
-												})
-												.filter((brand: any) =>
-													selectedUsers.length > 0
-														? selectedUsers.includes(brand.stock)
-														: true,
-												)
-												.sort((a: any, b: any) => b.code - a.code)
-												.map((brand: any, index: any) => {
-													const formattedTimestamp = brand.timestamp
-														?.toDate
-														? brand.timestamp.toDate().toLocaleString() // Firestore Timestamp
-														: new Date(
-																brand.timestamp?.seconds * 1000,
-														  ).toLocaleString(); // Handle raw seconds & nanoseconds
-
-													return (
-														<tr key={index}>
-															<td>{formattedTimestamp}</td>
-															<th>{brand.barcode}</th>
-															<td>{brand.category}</td>
-															<td>{brand.brand}</td>
-															<td>{brand.model}</td>
-															<td>{brand.quantity}</td>
-															<td>{brand.sellingPrice?.toFixed(2)}</td>
-															<td>{brand.description}</td>
-															<td>{brand.stock}</td>
-														</tr>
-													);
-												})}
+												return (
+													<tr key={index}>
+														<td>{formattedTimestamp}</td>
+														<th>{brand.barcode}</th>
+														<td>{brand.category}</td>
+														<td>{brand.brand}</td>
+														<td>{brand.model}</td>
+														<td>{brand.quantity}</td>
+														<td>{brand.sellingPrice?.toFixed(2)}</td>
+														<td>{typeof brand.cost === 'number' ? brand.cost.toFixed(2) : brand.cost}</td>
+														<td>{brand.description}</td>
+														<td>{brand.stock}</td>
+													</tr>
+												);
+											})
+										) : (
+											<tr>
+												<td colSpan={10} className="text-center py-4">
+													No matching records found.
+													{selectedUsers.length > 0 && selectedUsers.length < 2 && (
+														<span> Current filters: <strong>{selectedUsers.join(', ')}</strong></span>
+													)}
+													{startDate && (
+														<span> From date: <strong>{startDate}</strong></span>
+													)}
+													{searchTerm && (
+														<span> Search: <strong>"{searchTerm}"</strong></span>
+													)}
+													<div className="mt-2">
+														Try adjusting your filters or search terms.
+														{(startDate || searchTerm || selectedUsers.length < 2) && (
+															<Button
+																color="link"
+																size="sm"
+																className="p-0 ms-2"
+																onClick={() => {
+																	setSelectedUsers(['stockIn', 'stockOut']);
+																	setStartDate('');
+																	setSearchTerm('');
+																	if (inputRef.current) {
+																		inputRef.current.value = '';
+																	}
+																}}
+															>
+																Clear all filters
+															</Button>
+														)}
+													</div>
+												</td>
+											</tr>
+										)}
 									</tbody>
 								</table>
 							</CardBody>

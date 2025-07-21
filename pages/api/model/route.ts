@@ -4,33 +4,42 @@ import {
   getModel,
   updateModel,
   deleteModel,
+  searchModels,
 } from '../../../service/modelService';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     switch (req.method) {
       case 'POST': {
-        const { name, brand, category } = req.body;
+        const { name, brand, category, description } = req.body;
         if (!name) {
           res.status(400).json({ error: 'Name is required' });
           return;
         }
-        const id = await createModel(name, brand, category);
+        const id = await createModel(name, brand, category, description);
         res.status(201).json({ message: 'Model created', id });
         break;
       }
       case 'GET': {
-        const models = await getModel();
+        const { search } = req.query;
+        let models;
+        
+        if (search && typeof search === 'string') {
+          models = await searchModels(search);
+        } else {
+          models = await getModel();
+        }
+        
         res.status(200).json(models);
         break;
       }
       case 'PUT': {
-        const { id, status, name, brand, category } = req.body;
+        const { id, status, name, brand, category, description } = req.body;
         if (!id || !name) {
           res.status(400).json({ error: 'Model ID and name are required' });
           return;
         }
-        await updateModel(id, status, name, brand, category);
+        await updateModel(id, name, brand, category, status, description);
         res.status(200).json({ message: 'Model updated' });
         break;
       }

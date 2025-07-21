@@ -1,118 +1,165 @@
-import { firestore } from '../firebaseConfig';
-import {
-	addDoc,
-	collection,
-	getDocs,
-	doc,
-	updateDoc,
-	deleteDoc,
-	getDoc,
-	query,
-	where,
-	Timestamp,
-} from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
 
-export const createCategory = async (name: string) => {
+export const createCategory = async (name: string) => {console.log(name);
 	const status = true;
-	const timestamp = Timestamp.now();
-	const docRef = await addDoc(collection(firestore, 'CategoryDisplay'), {
-		name,
-		status,
-		timestamp: timestamp,
-	});
-	return docRef.id;
+	const timestamp = new Date();
+	const { data, error } = await supabase
+		.from('CategoryDisplay')
+		.insert([{ name, status, timestamp }])
+		.select()
+		.single(); // Return a single row
+
+	if (error) throw error;
+	return data.id; // Or whatever ID field you use
 };
 
 export const getCategory = async () => {
-	const q = query(collection(firestore, 'CategoryDisplay'), where('status', '==', true));
-	const querySnapshot = await getDocs(q);
-	return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	const { data, error } = await supabase
+		.from('CategoryDisplay')
+		.select('*')
+		.eq('status', true);
+
+	if (error) throw error;
+
+	return data;
 };
 
 export const getDeleteCategory = async () => {
-	const q = query(collection(firestore, 'CategoryDisplay'), where('status', '==', false));
-	const querySnapshot = await getDocs(q);
-	return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+	const { data, error } = await supabase
+		.from('CategoryDisplay')
+		.select('*')
+		.eq('status', false);
+
+	if (error) throw error;
+	return data;
 };
 
 export const getCategoryById = async (id: string) => {
-	const categoryRef = doc(firestore, 'CategoryDisplay', id);
-	const categorySnap = await getDoc(categoryRef);
-	if (categorySnap.exists()) {
-		return { id: categorySnap.id, ...categorySnap.data() };
-	} else {
-		return null;
-	}
+	const { data, error } = await supabase
+		.from('CategoryDisplay')
+		.select('*')
+		.eq('id', id)
+		.single();
+
+	if (error) return null;
+	return data;
 };
 
 export const updateCategory1 = async (id: string, name: string, status: boolean) => {
-	const categoryRef = doc(firestore, 'CategoryDisplay', id);
-	await updateDoc(categoryRef, { name, status });
+	const { error } = await supabase
+		.from('CategoryDisplay')
+		.update({ name, status })
+		.eq('id', id);
+
+	if (error) throw error;
 };
 
 export const updateCategory = async (id: string, newName: string, status: boolean) => {
 	try {
-		// Get the old category name from the CategoryAccessory document
-		const categoryRef = doc(firestore, 'CategoryDisplay', id);
-		const categoryDoc: any = await getDoc(categoryRef);
+		// Get old category name
+		const { data: category, error: catErr } = await supabase
+			.from('CategoryDisplay')
+			.select('name')
+			.eq('id', id)
+			.single();
 
-		if (!categoryDoc.exists()) {
-			console.error(`Category with ID "${id}" does not exist.`);
+		if (catErr || !category) {
+			console.error(`Category with ID "${id}" not found.`);
+			return;
 		}
 
-		const oldName = categoryDoc.data().name; // Get the old category name
-		console.log(`Old category name: "${oldName}"`);
+		const oldName = category.name;
 
-		// Update the category name in the CategoryAccessory document
-		await updateDoc(categoryRef, { name: newName, status });
+		// Update category
+		const { error: updateCatErr } = await supabase
+			.from('CategoryDisplay')
+			.update({ name: newName, status })
+			.eq('id', id);
 
-		// Fetch all ItemManagementAcce documents with the matching old category name
-		const itemManagementRef = collection(firestore, 'ItemManagementDis');
-		const itemQuery = query(itemManagementRef, where('category', '==', oldName));
-		const querySnapshot = await getDocs(itemQuery);
+		if (updateCatErr) throw updateCatErr;
 
-		if (querySnapshot.empty) {
-			console.log(
-				`No documents found in ItemManagementAcce with category name "${oldName}".`,
-			);
+		// Update matching ItemManagementDis
+		const { data: items, error: itemErr } = await supabase
+			.from('ItemManagementDis')
+			.select('id')
+			.eq('category', oldName);
+
+		if (itemErr) throw itemErr;
+
+		for (const item of items) {
+			await supabase
+				.from('ItemManagementDis')
+				.update({ category: newName })
+				.eq('id', item.id);
 		}
 
-		// Update the category name in the matching ItemManagementAcce documents
-		const batchUpdates = querySnapshot.docs.map((docSnapshot) => {
-			const itemDocRef = doc(firestore, 'ItemManagementDis', docSnapshot.id);
-			return updateDoc(itemDocRef, { category: newName });
-		});
+		// Update matching Stock
+		const { data: stocks, error: stockErr } = await supabase
+			.from('Stock')
+			.select('id')
+			.eq('category', oldName);
 
-		// Wait for all updates to complete
-		await Promise.all(batchUpdates);
+		if (stockErr) throw stockErr;
 
-		const stockManagementRef = collection(firestore, 'Stock');
-		const stockQuery = query(stockManagementRef, where('category', '==', oldName));
-		const querySnapshot1 = await getDocs(stockQuery);
-
-		if (querySnapshot1.empty) {
-			console.log(
-				`No documents found in ItemManagementAcce with category name "${oldName}".`,
-			);
+		for (const stock of stocks) {
+			await supabase
+				.from('Stock')
+				.update({ category: newName })
+				.eq('id', stock.id);
 		}
 
-		// Update the category name in the matching ItemManagementAcce documents
-		const batchUpdates1 = querySnapshot1.docs.map((docSnapshot) => {
-			const stockDocRef = doc(firestore, 'Stock', docSnapshot.id);
-			return updateDoc(stockDocRef, { category: newName });
-		});
+		// Update matching Brand records
+		const { data: brands, error: brandErr } = await supabase
+			.from('BrandDisplay')
+			.select('id')
+			.eq('category', oldName);
 
-		// Wait for all updates to complete
-		await Promise.all(batchUpdates1);
+		if (brandErr) throw brandErr;
 
-		console.log(
-			`Category name updated from "${oldName}" to "${newName}" and reflected in related documents.`,
-		);
+		for (const brand of brands) {
+			await supabase
+				.from('BrandDisplay')
+				.update({ category: newName })
+				.eq('id', brand.id);
+		}
+
+		// Update matching Model records
+		const { data: models, error: modelErr } = await supabase
+			.from('ModelDisplay')
+			.select('id')
+			.eq('category', oldName);
+
+		if (modelErr) throw modelErr;
+
+		for (const model of models) {
+			await supabase
+				.from('ModelDisplay')
+				.update({ category: newName })
+				.eq('id', model.id);
+		}
+
+		console.log(`Updated category and reflected changes in related tables.`);
 	} catch (error) {
 		console.error('Error updating category:', error);
 	}
 };
+
 export const deleteCategory = async (id: string) => {
-	const categoryRef = doc(firestore, 'CategoryDisplay', id);
-	await deleteDoc(categoryRef);
+	const { error } = await supabase
+		.from('CategoryDisplay')
+		.delete()
+		.eq('id', id);
+
+	if (error) throw error;
+};
+
+export const searchCategories = async (searchTerm: string) => {
+	const { data, error } = await supabase
+		.from('CategoryDisplay')
+		.select('*')
+		.eq('status', true)
+		.ilike('name', `%${searchTerm}%`);
+
+	if (error) throw error;
+	return data;
 };

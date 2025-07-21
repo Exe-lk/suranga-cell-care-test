@@ -2,16 +2,17 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 
 export const ItemDisApiSlice = createApi({
   reducerPath: 'ItemDisApi',
-  baseQuery: fetchBaseQuery({ baseUrl: 'https://suranga-cell-care-test.netlify.app/api/'  }),
+  baseQuery: fetchBaseQuery({ baseUrl: process.env.NEXT_PUBLIC_BASE_URL }),
   tagTypes: ['ItemDis'],
   endpoints: (builder) => ({
     getItemDiss: builder.query({
-      query: () => 'ItemDis/route',
+      query: (searchTerm) => searchTerm ? `ItemDis/route?search=${searchTerm}` : 'ItemDis/route',
       providesTags: ['ItemDis'],
     }),
     getItemDiss1: builder.query({
       query: ({ page, perPage, lastDoc,searchtearm }) => ({
-        url: `ItemDis/route1?page=${page}&perPage=${perPage}&lastDoc=${lastDoc || ''}&searchTerm=${searchtearm||''}`,
+        // url: `ItemDis/route1?page=${page}&perPage=${perPage}&lastDoc=${lastDoc || ''}&searchTerm=${searchtearm||''}`,
+        url: `ItemDis/route`,
       }),
       providesTags: ['ItemDis'],
     }),

@@ -19,6 +19,8 @@ import { ItemDisApiSlice } from './slices/itemManagementDisApiSlice';
 import { stockInOutAcceApiSlice } from './slices/stockInOutAcceApiSlice';
 import { repairedPhoneApiSlice } from './slices/repairedPhoneApiSlice';
 import {billdisplayApiSlice} from './slices/displayService';
+import { accessoryBillApiSlice } from './slices/accessoryBillApiSlice';
+import { returnDisplayApiSlice } from './slices/returnDisplayApiSlice';
 
 const store = configureStore({
 	reducer: {
@@ -41,6 +43,8 @@ const store = configureStore({
 		[stockInOutAcceApiSlice.reducerPath]: stockInOutAcceApiSlice.reducer,
 		[repairedPhoneApiSlice.reducerPath]: repairedPhoneApiSlice.reducer,
 		[billdisplayApiSlice.reducerPath]: billdisplayApiSlice.reducer,
+		[accessoryBillApiSlice.reducerPath]: accessoryBillApiSlice.reducer,
+		[returnDisplayApiSlice.reducerPath]: returnDisplayApiSlice.reducer,
 	},
 	middleware: (getDefaultMiddleware) =>
 		getDefaultMiddleware().concat(
@@ -63,6 +67,8 @@ const store = configureStore({
 			stockInOutAcceApiSlice.middleware,
 			repairedPhoneApiSlice.middleware,
 			billdisplayApiSlice.middleware,
+			accessoryBillApiSlice.middleware,
+			returnDisplayApiSlice.middleware,
 		),
 });
 setupListeners(store.dispatch);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import PageWrapper from '../../../layout/PageWrapper/PageWrapper';
-import { addDoc, collection, doc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { addDoc, collection, query, where } from 'firebase/firestore';
 import { firestore } from '../../../firebaseConfig';
 import 'react-simple-keyboard/build/css/index.css';
 import Swal from 'sweetalert2';
@@ -20,6 +20,7 @@ import Page from '../../../layout/Page/Page';
 import Spinner from '../../../components/bootstrap/Spinner';
 import { useGetItemAccesQuery } from '../../../redux/slices/itemManagementAcceApiSlice';
 import { number } from 'prop-types';
+import { supabase } from '../../../lib/supabase';
 
 function index() {
 	const [orderedItems, setOrderedItems] = useState<any[]>([]);
@@ -78,62 +79,180 @@ function index() {
 		};
 	}, []);
 	useEffect(() => {
-		const fetchData = async () => {
-			try {
-				const querySnapshot = await getDocs(collection(firestore, 'customer'));
-				const dataList = querySnapshot.docs.map((doc) => ({
-					...doc.data(),
-				}));
-				setCustomer(dataList);
-				// console.log(dataList);
-			} catch (error) {
-				console.error('Error fetching data: ', error);
+		fetchCustomerData();
+	}, []);
+	
+	// Move the customer fetching to a standalone function we can call when needed
+	const fetchCustomerData = async () => {
+		try {
+			console.log("Fetching customer data...");
+			
+			// First, fetch from customer table
+			const { data: customerData, error: customerError } = await supabase
+				.from('customer')
+				.select('*');
+	
+			if (customerError) throw customerError;
+			
+			// Now also fetch from accessorybill table for all unique customers
+			const { data: billData, error: billError } = await supabase
+				.from('accessorybill')
+				.select('name, contact')
+				.not('name', 'is', null)
+				.not('contact', 'is', null);
+				
+			if (billError) throw billError;
+			
+			// Combine the data, giving preference to customer table entries
+			let combinedCustomers = [...(customerData || [])];
+			
+			// Add unique customers from bills that aren't already in the customer table
+			if (billData) {
+				billData.forEach(bill => {
+					// Normalize the contact number for comparison
+					const normalizedBillContact = normalizeContact(bill.contact);
+					
+					// Only add if this contact doesn't already exist
+					const exists = combinedCustomers.some(c => 
+						normalizeContact(c.contact) === normalizedBillContact
+					);
+					
+					if (!exists && bill.contact && bill.name) {
+						combinedCustomers.push({
+							id: `bill_${bill.contact}`,
+							name: bill.name,
+							contact: bill.contact
+						});
+					}
+				});
 			}
-		};
-
-		fetchData();
-	}, [orderedItems]);
-
-	const contactchanget = async (value: any) => {
-		if (value.length > 1 && value.startsWith('0')) {
-			value = value.substring(1);
-		}
-		setContact(value);
-		if (value.length === 9) {
-			const matchingCustomer = customer.find((customer) => customer.contact === value);
-
-			if (matchingCustomer) {
-				const { customer: customerId, contact, name } = matchingCustomer; // Extract specific fields
-				setName(name);
-				setStaus(true);
-			} else {
-				console.log('No matching customer found for the contact:', value);
-				setStaus(false);
-			}
+			
+			setCustomer(combinedCustomers);
+			console.log('Loaded combined customer data:', combinedCustomers);
+		} catch (error) {
+			console.error('Error fetching customer data:', error);
 		}
 	};
+	
+	// Helper function to normalize contact numbers for consistent comparison
+	const normalizeContact = (contact: any): string => {
+		if (!contact) return '';
+		
+		// Convert to string
+		let contactStr = String(contact);
+		
+		// Remove leading zero if present
+		if (contactStr.startsWith('0')) {
+			contactStr = contactStr.substring(1);
+		}
+		
+		// Remove any spaces or special characters
+		contactStr = contactStr.replace(/[^0-9]/g, '');
+		
+		return contactStr;
+	};
+
+	const contactchanget = async (value: any) => {
+		// Don't process empty values
+		if (!value) {
+			setContact(0);
+			setName('');
+			setStaus(false);
+			return;
+		}
+		
+		// Format the contact number consistently
+		const normalizedInput = normalizeContact(value);
+		setContact(value);
+		
+		console.log('Contact search value (normalized):', normalizedInput);
+		console.log('Available customers:', customer);
+		
+		// Try different search approaches to find the customer
+		let matchingCustomer = null;
+		
+		// Loop through all customers and try to find matches
+		for (const cust of customer) {
+			const custContact = normalizeContact(cust.contact);
+			
+			// Debug each comparison
+			console.log(`Comparing input "${normalizedInput}" with customer "${custContact}", name: ${cust.name}`);
+			
+			// 1. Exact match
+			if (custContact === normalizedInput) {
+				console.log("FOUND EXACT MATCH");
+				matchingCustomer = cust;
+				break;
+			}
+			
+			// 2. Contains match (input is part of customer contact)
+			if (normalizedInput.length >= 3 && custContact.includes(normalizedInput)) {
+				console.log("FOUND CONTAINS MATCH");
+				matchingCustomer = cust;
+				break;
+			}
+			
+			// 3. Ends-with match
+			if (normalizedInput.length >= 3 && custContact.endsWith(normalizedInput)) {
+				console.log("FOUND ENDS-WITH MATCH");
+				matchingCustomer = cust;
+				break;
+			}
+		}
+
+		// If we found a matching customer, set the name and status
+		if (matchingCustomer) {
+			console.log('Found matching customer:', matchingCustomer);
+			setName(matchingCustomer.name);
+			setStaus(true);
+		} else {
+			// No match found, allow manual entry
+			setStaus(false);
+			setName('');
+		}
+	};
+	// useEffect(() => {
+	// 	const fetchData = async () => {
+	// 		try {
+	// 			const querySnapshot = await getDocs(collection(firestore, 'accessorybill'));
+	// 			const dataList = querySnapshot.docs.map((doc) => ({
+	// 				id: parseInt(doc.id, 10), // Ensure `id` is a number
+	// 				...doc.data(),
+	// 			}));
+	// 			// console.log('Data List:', dataList);
+	// 			const largestId = dataList.reduce(
+	// 				(max, item) => (item.id > max ? item.id : max),
+	// 				0,
+	// 			);
+	// 			// console.log('Largest ID:', largestId);
+	// 			setId(largestId + 1);
+	// 		} catch (error) {
+	// 			console.error('Error fetching data: ', error);
+	// 		}
+	// 	};
+
+	// 	fetchData();
+	// }, [orderedItems]);
 	useEffect(() => {
 		const fetchData = async () => {
-			try {
-				const querySnapshot = await getDocs(collection(firestore, 'accessorybill'));
-				const dataList = querySnapshot.docs.map((doc) => ({
-					id: parseInt(doc.id, 10), // Ensure `id` is a number
-					...doc.data(),
-				}));
-				// console.log('Data List:', dataList);
-				const largestId = dataList.reduce(
-					(max, item) => (item.id > max ? item.id : max),
-					0,
-				);
-				// console.log('Largest ID:', largestId);
-				setId(largestId + 1);
-			} catch (error) {
-				console.error('Error fetching data: ', error);
-			}
+		  try {
+			const { data, error } = await supabase
+			  .from('accessorybill')
+			  .select('id')
+			  .order('id', { ascending: false })
+			  .limit(1);
+	  
+			if (error) throw error;
+	  
+			const largestId = data?.[0]?.id || 0;
+			setId(largestId + 1);
+		  } catch (error:any) {
+			console.error('Error fetching max ID:', error.message);
+		  }
 		};
-
+	  
 		fetchData();
-	}, [orderedItems]);
+	  }, [orderedItems]);
 
 	useEffect(() => {
 		if (dropdownRef.current) {
@@ -301,14 +420,16 @@ function index() {
 				const result1 = updatedAccstock.filter((item: any) => item.stock === 'stockIn');
 				const combinedResult = [...result1];
 				setItems(combinedResult);
-				// console.log(combinedResult);
+				console.log('Accessory stock items:', combinedResult);
+				// Log itemAcces data to debug quantity issues
+				console.log('ItemAcces data:', itemAcces);
 			} catch (error) {
 				console.error('Error fetching data: ', error);
 			}
 		};
 
 		fetchData();
-	}, [isLoading]);
+	}, [isLoading, itemAcces]);
 
 	const handlePopupOk = async () => {
 		if (!selectedProduct || quantity <= 0 || quantity > 25) {
@@ -317,7 +438,8 @@ function index() {
 		}
 		const selectedItem = items.find((item) => item.barcode === selectedProduct);
 		if (selectedItem) {
-			// console.log(selectedItem);
+			console.log('Selected item:', selectedItem);
+			
 			if (selectedItem.type == 'displaystock') {
 				const existingItemIndex = orderedItems.findIndex(
 					(item) => item.barcode.slice(0, 4) === selectedProduct.slice(0, 4),
@@ -339,27 +461,116 @@ function index() {
 				}
 				setOrderedItems(updatedItems);
 			} else {
-				const matchingItem = itemAcces?.find(
-					(accessItem: any) => accessItem.code === selectedProduct.substring(0, 4),
+				// Get the barcode prefix to find matching inventory item
+				const barcodePrefix = selectedProduct.substring(0, 4);
+				console.log('Looking for item with code:', barcodePrefix);
+				console.log('All available item codes:', itemAcces?.map((item: any) => item.code));
+				
+				// More flexible matching - try different approaches
+				let matchingItem = itemAcces?.find(
+					(accessItem: any) => accessItem.code === barcodePrefix
 				);
+				
+				// If not found, try trimming whitespace
+				if (!matchingItem) {
+					matchingItem = itemAcces?.find(
+						(accessItem: any) => {
+							// Ensure code is a string before using trim
+							const itemCode = typeof accessItem.code === 'string' ? accessItem.code : String(accessItem.code);
+							return itemCode.trim() === barcodePrefix.trim();
+						}
+					);
+				}
+				
+				// If still not found, try case-insensitive comparison
+				if (!matchingItem) {
+					matchingItem = itemAcces?.find(
+						(accessItem: any) => {
+							// Ensure code is a string before using toLowerCase
+							const itemCode = typeof accessItem.code === 'string' ? accessItem.code : String(accessItem.code);
+							return itemCode.toLowerCase() === barcodePrefix.toLowerCase();
+						}
+					);
+				}
+				
+				// If still not found, try comparing just the first 3 characters
+				if (!matchingItem) {
+					matchingItem = itemAcces?.find(
+						(accessItem: any) => {
+							if (!accessItem.code) return false;
+							// Ensure code is a string before using substring
+							const itemCode = typeof accessItem.code === 'string' ? accessItem.code : String(accessItem.code);
+							return itemCode.substring(0, 3) === barcodePrefix.substring(0, 3);
+						}
+					);
+				}
+				
+				console.log('Found matching item:', matchingItem);
+				
+				// Debug raw quantity values
+				if (matchingItem) {
+					console.log('Raw quantity value:', matchingItem.quantity);
+					console.log('Quantity type:', typeof matchingItem.quantity);
+				} else {
+					console.log('No matching item found. Selected product barcode:', selectedProduct);
+					// Get the item from the Accstock to show its properties
+					const stockItem = Accstock?.find((item: any) => item.barcode === selectedProduct);
+					console.log('Selected product data from stock:', stockItem);
+				}
+				
+				// Ensure quantities are properly converted to numbers
+				// Try multiple parsing approaches to handle different data formats
+				let availableQty = 0;
+				if (matchingItem) {
+					if (typeof matchingItem.quantity === 'string') {
+						availableQty = parseInt(matchingItem.quantity, 10);
+					} else if (typeof matchingItem.quantity === 'number') {
+						availableQty = matchingItem.quantity;
+					}
+				}
+				
+				const requestedQty = parseInt(quantity) || 0;
+				
+				console.log('Available quantity (parsed):', availableQty);
+				console.log('Requested quantity:', requestedQty);
+				
+				// Check if there's enough stock available
+				if (!matchingItem) {
+					Swal.fire('Error', `Item not found in inventory.`, 'error');
+					return;
+				}
+				
+				if (availableQty < requestedQty) {
+					Swal.fire('Error', `Insufficient stock available for this item. Available: ${availableQty}, Requested: ${requestedQty}`, 'error');
+					return;
+				}
 
 				const existingItemIndex = orderedItems.findIndex(
 					(item) => item.barcode === selectedProduct,
 				);
-				let updatedItems;
+				
+				// For existing items, check total quantity against available stock
 				if (existingItemIndex !== -1) {
-					updatedItems = [...orderedItems];
+					const totalQuantity = parseInt(quantity) || 0;
+					
+					if (availableQty < totalQuantity) {
+						Swal.fire('Error', `Insufficient stock available for this item. Available: ${availableQty}, Requested: ${totalQuantity}`, 'error');
+						return;
+					}
+					
+					let updatedItems = [...orderedItems];
 					updatedItems[existingItemIndex] = {
 						...selectedItem,
 						quantity: Number(quantity),
 					};
+					setOrderedItems(updatedItems);
 				} else {
-					updatedItems = [
+					const updatedItems = [
 						...orderedItems,
 						{ ...selectedItem, quantity, warranty: matchingItem?.warranty },
 					];
+					setOrderedItems(updatedItems);
 				}
-				setOrderedItems(updatedItems);
 			}
 			setSelectedProduct('');
 			setQuantity(1);
@@ -397,8 +608,93 @@ function index() {
 	};
 
 	const addbill = async () => {
+		// Validate contact number first - make it required
+		if (!contact || contact === 0 || String(contact).trim() === '') {
+			Swal.fire('Error', 'Contact number is required to print the bill.', 'error');
+			return;
+		}
+
 		if (orderedItems.length > 0) {
 			try {
+				// Check if all items have sufficient stock before proceeding
+				const insufficientItems = [];
+				
+				for (const item of orderedItems) {
+					const { barcode, quantity } = item;
+					const barcodePrefix = barcode.slice(0, 4);
+					console.log('Checking final stock for barcode prefix:', barcodePrefix);
+					
+					// More flexible matching for final checkout
+					let matchingItem = itemAcces?.find(
+						(accessItem: any) => accessItem.code === barcodePrefix
+					);
+					
+					// If not found, try alternatives
+					if (!matchingItem) {
+						matchingItem = itemAcces?.find(
+							(accessItem: any) => {
+								// Ensure code is a string before using trim
+								const itemCode = typeof accessItem.code === 'string' ? accessItem.code : String(accessItem.code);
+								return itemCode.trim() === barcodePrefix.trim();
+							}
+						);
+					}
+					
+					if (!matchingItem) {
+						matchingItem = itemAcces?.find(
+							(accessItem: any) => {
+								// Ensure code is a string before using toLowerCase
+								const itemCode = typeof accessItem.code === 'string' ? accessItem.code : String(accessItem.code);
+								return itemCode.toLowerCase() === barcodePrefix.toLowerCase();
+							}
+						);
+					}
+					
+					if (!matchingItem) {
+						matchingItem = itemAcces?.find(
+							(accessItem: any) => {
+								if (!accessItem.code) return false;
+								// Ensure code is a string before using substring
+								const itemCode = typeof accessItem.code === 'string' ? accessItem.code : String(accessItem.code);
+								return itemCode.substring(0, 3) === barcodePrefix.substring(0, 3);
+							}
+						);
+					}
+					
+					// More robust parsing of quantity values
+					let availableQty = 0;
+					if (matchingItem) {
+						if (typeof matchingItem.quantity === 'string') {
+							availableQty = parseInt(matchingItem.quantity, 10);
+						} else if (typeof matchingItem.quantity === 'number') {
+							availableQty = matchingItem.quantity;
+						}
+					}
+					
+					const requestedQty = parseInt(quantity) || 0;
+					
+					if (!matchingItem || availableQty < requestedQty) {
+						insufficientItems.push({
+							name: `${item.category} ${item.model} ${item.brand}`,
+							requested: requestedQty,
+							available: availableQty,
+						});
+					}
+				}
+				
+				if (insufficientItems.length > 0) {
+					const itemList = insufficientItems.map(item => 
+						`${item.name} (Requested: ${item.requested}, Available: ${item.available})`
+					).join('<br>');
+					
+					Swal.fire({
+						title: 'Insufficient Stock',
+						html: `Cannot proceed with billing. The following items don't have enough stock:<br><br>${itemList}`,
+						icon: 'error'
+					});
+					return;
+				}
+
 				const result = await Swal.fire({
 					title: 'Are you sure?',
 					text: 'You will not be able to recover this status!',
@@ -426,7 +722,16 @@ function index() {
 					);
 					localStorage.setItem('drafts', JSON.stringify(updatedDrafts));
 					if (!status) {
-						await addDoc(collection(firestore, 'customer'), { name, contact });
+						// Create new customer in Supabase instead of Firebase
+						const { error: customerError } = await supabase
+							.from('customer')
+							.insert([{ name, contact }]);
+						
+						if (customerError) {
+							console.error('Error saving customer:', customerError);
+						} else {
+							console.log('New customer saved successfully');
+						}
 					}
 					const values = {
 						orders: orderedItems,
@@ -538,6 +843,8 @@ function index() {
 				setName('');
 				setContact(0);
 				setSelectedProduct('');
+				// Refetch customer data when starting a new bill to ensure we have the latest
+				fetchCustomerData();
 				if (dropdownRef.current) {
 					dropdownRef.current.focus();
 				}
@@ -547,6 +854,8 @@ function index() {
 			setAmount(0);
 			setQuantity(1);
 			setSelectedProduct('');
+			// Refetch customer data when starting a new bill to ensure we have the latest
+			fetchCustomerData();
 			if (dropdownRef.current) {
 				dropdownRef.current.focus();
 			}
@@ -559,10 +868,8 @@ function index() {
 		discount: any,
 		quentity: number,
 	) => {
-		if (price <= discount) {
-			Swal.fire('Warning..!', 'Insufficient Item', 'error');
-			discount = 0;
-		}
+		// Remove the incorrect validation that prevents entering selling prices
+		// Allow any selling price to be entered
 		setOrderedItems((prevItems) =>
 			prevItems.map(
 				(item, i) =>
@@ -598,24 +905,46 @@ function index() {
 
 	const handlereturn = async (id: any) => {
 		try {
-			console.log(id);
-			const docRef = doc(firestore, 'return', id);
-			const docSnap = await getDoc(docRef);
+			console.log('Fetching return data for ID:', id);
+			
+			const { data, error } = await supabase
+				.from('return')
+				.select('*')
+				.eq('id', id)
+				.single();
 
-			if (docSnap.exists()) {
-				// Get document data along with its ID
-				const data = { id: docSnap.id, ...docSnap.data() };
-				console.log('Document Data:', data);
+			if (error) {
+				console.error('Supabase error:', error);
+				if (error.code === 'PGRST116') {
+					// No rows returned
+					Swal.fire('Warning..!', 'NO Return Id Found', 'error');
+					setReturnid('');
+					return null;
+				}
+				throw error;
+			}
+
+			if (data) {
+				console.log('Return Data:', data);
 				setReturndata(data);
 			} else {
-				Swal.fire('Warning..!', 'NO Return Id', 'error');
+				Swal.fire('Warning..!', 'NO Return Id Found', 'error');
 				setReturnid('');
 				return null;
 			}
 		} catch (error) {
-			console.error('Error fetching document:', error);
+			console.error('Error fetching return data:', error);
+			Swal.fire('Error', 'Failed to fetch return data. Please try again.', 'error');
 		}
 	};
+
+	// Add this function to handle direct name lookups from contact
+	const handleContactChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const value = e.target.value.slice(0, 9);
+		console.log("Contact input changed:", value);
+		contactchanget(value);
+	};
+
 	if (isLoading) {
 		// console.log(isLoading);
 		return (
@@ -884,10 +1213,7 @@ function index() {
 										type='number'
 										value={contact}
 										min={0}
-										onChange={(e: any) => {
-											const value = e.target.value.slice(0, 9);
-											contactchanget(value);
-										}}
+										onChange={handleContactChange}
 										validFeedback='Looks good!'
 									/>
 								</FormGroup>
@@ -903,6 +1229,9 @@ function index() {
 										}}
 										validFeedback='Looks good!'
 									/>
+									<small className='text-muted'>
+                                        {status ? "Customer record found in database" : "New customer - will be saved with this bill"}
+                                    </small>
 								</FormGroup>
 							</CardBody>
 							<CardFooter>

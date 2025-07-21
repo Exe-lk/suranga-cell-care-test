@@ -127,16 +127,39 @@ const BillAddModal: FC<CategoryEditModalProps> = ({ id, isOpen, setIsOpen }) => 
 					});
 					formik.resetForm();
 					setIsOpen(false);
-				} catch (error) {
+				} catch (error: any) {
+					console.error('API Error:', error);
+					
+					let errorMessage = 'Failed to add the bill. Please try again.';
+					
+					// Try to extract detailed error message from the response
+					if (error.data) {
+						if (typeof error.data === 'string') {
+							errorMessage = error.data;
+						} else if (error.data.error) {
+							errorMessage = error.data.error;
+							if (error.data.message) {
+								errorMessage += `: ${error.data.message}`;
+							}
+							if (error.data.details) {
+								errorMessage += `\nDetails: ${error.data.details}`;
+							}
+						}
+					}
+					
 					await Swal.fire({
 						icon: 'error',
 						title: 'Error',
-						text: 'Failed to add the bill. Please try again.',
+						text: errorMessage,
 					});
 				}
-			} catch (error) {
-				console.error('Error during handleUpload: ', error);
-				alert('An error occurred during file upload. Please try again later.');
+			} catch (error: any) {
+				console.error('Error during submission:', error);
+				await Swal.fire({
+					icon: 'error',
+					title: 'Unexpected Error',
+					text: error.message || 'An unexpected error occurred. Please try again later.',
+				});
 			}
 		},
 	});
@@ -312,7 +335,7 @@ const BillAddModal: FC<CategoryEditModalProps> = ({ id, isOpen, setIsOpen }) => 
 											'Item',
 											checked
 												? [...formik.values.Item, value]
-												: formik.values.Condition.filter(
+												: formik.values.Item.filter(
 														(c: string) => c !== value,
 												  ),
 										);
@@ -325,12 +348,12 @@ const BillAddModal: FC<CategoryEditModalProps> = ({ id, isOpen, setIsOpen }) => 
 								</label>
 							</div>
 						))}
-						{formik.touched.Condition && formik.errors.Condition && (
-							<div className='invalid-feedback'>{formik.errors.Condition}</div>
+						{formik.touched.Item && formik.errors.Item && (
+							<div className='invalid-feedback'>{formik.errors.Item}</div>
 						)}
 						</>
 					</FormGroup>
-					{/* <FormGroup id='technicianNum' label='Technician No' className='col-md-6'>
+					 <FormGroup id='technicianNum' label='Technician No' className='col-md-6'>
 						<Select
 							ariaLabel='Select Technician'
 							placeholder='Select a Technician'
@@ -351,7 +374,7 @@ const BillAddModal: FC<CategoryEditModalProps> = ({ id, isOpen, setIsOpen }) => 
 						</Select>
 						{techniciansLoading ? <p>Loading technicians...</p> : <></>}
 						{isError ? <p>Error loading technicians. Please try again.</p> : <></>}
-					</FormGroup> */}
+					</FormGroup> 
 					<FormGroup id='CustomerName' label='Customer Name' className='col-md-6'>
 						<Input
 							onChange={formik.handleChange}

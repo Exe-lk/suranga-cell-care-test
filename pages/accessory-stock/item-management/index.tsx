@@ -32,6 +32,8 @@ import { useGetItemAccesQuery } from '../../../redux/slices/itemManagementAcceAp
 import bill from '../../../assets/img/bill/WhatsApp_Image_2024-09-12_at_12.26.10_50606195-removebg-preview (1).png';
 import { set } from 'date-fns';
 import Spinner from '../../../components/bootstrap/Spinner';
+import Select from '../../../components/bootstrap/forms/Select';
+import Option from '../../../components/bootstrap/Option';
 
 const Index: NextPage = () => {
 	const [searchTerm, setSearchTerm] = useState('');
@@ -44,6 +46,9 @@ const Index: NextPage = () => {
 	const [currentPage, setCurrentPage] = useState<number>(1);
 	const [perPage, setPerPage] = useState<number>(PER_COUNT['100']);
 	const [lastDoc, setLastDoc] = useState(null);
+	const [showLowStockAlert, setShowLowStockAlert] = useState(false);
+	const [lowStockItems, setLowStockItems] = useState<any[]>([]);
+	const [lowStockAlertShown, setLowStockAlertShown] = useState(false);
 	const {
 		data: itemAcces,
 		error,
@@ -51,12 +56,24 @@ const Index: NextPage = () => {
 		refetch,
 	} = useGetItemAcces1Query({ page: currentPage, perPage, lastDoc,searchtearm:searchTerm });
 	console.log(itemAcces?.data);
-	const data = itemAcces?.data;
+	const data = itemAcces?.data || [];
 	const [updateItemAcce] = useUpdateItemAcceMutation();
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 	const type = [{ type: 'Accessory' }, { type: 'Mobile' }];
 	const [quantity, setQuantity] = useState<any>();
+	
+	// New filter states
+	const [selectedStockTypes, setSelectedStockTypes] = useState<string[]>([]);
+	const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+	const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+	const [selectedModels, setSelectedModels] = useState<string[]>([]);
+	
+	// Get unique values for filters from data
+	const uniqueStockTypes = Array.from(new Set(data.map((item: any) => item.mobileType).filter(Boolean))) as string[];
+	const uniqueCategories = Array.from(new Set(data.map((item: any) => item.category).filter(Boolean))) as string[];
+	const uniqueBrands = Array.from(new Set(data.map((item: any) => item.brand).filter(Boolean))) as string[];
+	const uniqueModels = Array.from(new Set(data.map((item: any) => item.model).filter(Boolean))) as string[];
 
 	useEffect(() => {
 		if (itemAcces?.lastDoc) {
@@ -68,6 +85,101 @@ const Index: NextPage = () => {
 			inputRef.current.focus();
 		}
 	}, [itemAcces]);
+
+	// Check for low stock items and show alert only once on initial load
+	useEffect(() => {
+		if (data && data.length > 0 && !lowStockAlertShown) {
+			// Find items that are at or below reorder level
+			const lowItems = data.filter((item: any) => 
+				item.quantity <= item.reorderLevel
+			);
+			setLowStockItems(lowItems);
+			if (lowItems.length > 0) {
+				setShowLowStockAlert(true);
+				setLowStockAlertShown(true);
+				// Show notification only on initial load
+				Swal.fire({
+					title: 'Low Stock Alert',
+					html: `
+						<style>
+							.low-stock-table {
+								width: 100%;
+								border-collapse: collapse;
+								margin-top: 10px;
+							}
+							.low-stock-table th,
+							.low-stock-table td {
+								border: 1px solid #ddd;
+								padding: 8px;
+								text-align: left;
+							}
+							.low-stock-table th {
+								background-color: #f2f2f2;
+								font-weight: bold;
+							}
+							.low-stock-table tbody tr {
+								background-color: rgba(255, 193, 7, 0.1);
+							}
+							.low-stock-table tbody tr:nth-child(even) {
+								background-color: rgba(255, 193, 7, 0.2);
+							}
+							.table-container {
+								max-height: 400px;
+								overflow-y: auto;
+								margin-top: 10px;
+							}
+							.warning-icon {
+								color: #ffc107;
+								font-size: 48px;
+								margin-bottom: 10px;
+							}
+						</style>
+						<div style="text-align: center;">
+							<div class="warning-icon">⚠️</div>
+							<p style="margin-bottom: 20px; color: #666;">${lowItems.length} item(s) are at or below their reorder level:</p>
+						</div>
+						<div class="table-container">
+							<table class="low-stock-table">
+								<thead>
+									<tr>
+										<th>Item</th>
+										<th>Category</th>
+										<th>Quantity</th>
+										<th>Reorder Level</th>
+									</tr>
+								</thead>
+								<tbody>
+									${lowItems.map((item: any) => `
+										<tr>
+											<td>${item.brand} ${item.model}</td>
+											<td>${item.category || 'N/A'}</td>
+											<td style="text-align: center; color: ${item.quantity === 0 ? '#dc3545' : '#ffc107'}; font-weight: bold;">${item.quantity}</td>
+											<td style="text-align: center;">${item.reorderLevel}</td>
+										</tr>
+									`).join('')}
+								</tbody>
+							</table>
+						</div>
+					`,
+					icon: 'warning',
+					confirmButtonText: 'OK',
+					width: 700,
+					customClass: {
+						popup: 'low-stock-popup'
+					}
+				});
+			}
+		}
+	}, [data, lowStockAlertShown]);
+
+	const getRowStyle = (item: any) => {
+		if (item.quantity <= item.reorderLevel) {
+			return {
+				backgroundColor: 'rgba(255, 193, 7, 0.1)', // Light yellow background for low stock
+			};
+		}
+		return {};
+	};
 
 	const handleClickDelete = async (itemAcce: any) => {
 		if (itemAcce.quantity > 0) {
@@ -189,10 +301,191 @@ const Index: NextPage = () => {
 											))}
 										</ChecksGroup>
 									</FormGroup>
+									{uniqueStockTypes.length > 0 && (
+										<FormGroup label='Stock Type' className='col-12'>
+											<ChecksGroup>
+												{uniqueStockTypes.map((stockType) => (
+													<Checks
+														key={stockType}
+														id={stockType}
+														label={stockType}
+														name={stockType}
+														value={stockType}
+														checked={selectedStockTypes.includes(stockType)}
+														onChange={(event: any) => {
+															const { checked, value } = event.target;
+															setSelectedStockTypes((prev) =>
+																checked
+																	? [...prev, value]
+																	: prev.filter((item) => item !== value),
+															);
+														}}
+													/>
+												))}
+											</ChecksGroup>
+										</FormGroup>
+									)}
+									{uniqueCategories.length > 0 && (
+										<FormGroup label='Category' className='col-12'>
+											<ChecksGroup>
+												{uniqueCategories.map((category) => (
+													<Checks
+														key={category}
+														id={category}
+														label={category}
+														name={category}
+														value={category}
+														checked={selectedCategories.includes(category)}
+														onChange={(event: any) => {
+															const { checked, value } = event.target;
+															setSelectedCategories((prev) =>
+																checked
+																	? [...prev, value]
+																	: prev.filter((item) => item !== value),
+															);
+														}}
+													/>
+												))}
+											</ChecksGroup>
+										</FormGroup>
+									)}
+									{uniqueBrands.length > 0 && (
+										<FormGroup label='Brand' className='col-12'>
+											<ChecksGroup>
+												{uniqueBrands.map((brand) => (
+													<Checks
+														key={brand}
+														id={brand}
+														label={brand}
+														name={brand}
+														value={brand}
+														checked={selectedBrands.includes(brand)}
+														onChange={(event: any) => {
+															const { checked, value } = event.target;
+															setSelectedBrands((prev) =>
+																checked
+																	? [...prev, value]
+																	: prev.filter((item) => item !== value),
+															);
+														}}
+													/>
+												))}
+											</ChecksGroup>
+										</FormGroup>
+									)}
+									{uniqueModels.length > 0 && (
+										<FormGroup label='Model' className='col-12'>
+											<ChecksGroup>
+												{uniqueModels.map((model) => (
+													<Checks
+														key={model}
+														id={model}
+														label={model}
+														name={model}
+														value={model}
+														checked={selectedModels.includes(model)}
+														onChange={(event: any) => {
+															const { checked, value } = event.target;
+															setSelectedModels((prev) =>
+																checked
+																	? [...prev, value]
+																	: prev.filter((item) => item !== value),
+															);
+														}}
+													/>
+												))}
+											</ChecksGroup>
+										</FormGroup>
+									)}
 								</div>
 							</div>
 						</DropdownMenu>
 					</Dropdown>
+					{lowStockItems.length > 0 && (
+						<Button
+							icon='Warning'
+							color='warning'
+							isLight
+							onClick={() => {
+								Swal.fire({
+									title: 'Low Stock Items',
+									html: `
+										<style>
+											.low-stock-table {
+												width: 100%;
+												border-collapse: collapse;
+												margin-top: 10px;
+											}
+											.low-stock-table th,
+											.low-stock-table td {
+												border: 1px solid #ddd;
+												padding: 8px;
+												text-align: left;
+											}
+											.low-stock-table th {
+												background-color: #f2f2f2;
+												font-weight: bold;
+											}
+											.low-stock-table tbody tr {
+												background-color: rgba(255, 193, 7, 0.1);
+											}
+											.low-stock-table tbody tr:nth-child(even) {
+												background-color: rgba(255, 193, 7, 0.2);
+											}
+											.table-container {
+												max-height: 400px;
+												overflow-y: auto;
+												margin-top: 10px;
+											}
+											.warning-icon {
+												color: #ffc107;
+												font-size: 48px;
+												margin-bottom: 10px;
+											}
+										</style>
+										<div style="text-align: center;">
+											<div class="warning-icon">⚠️</div>
+											<p style="margin-bottom: 20px; color: #666;">The following items are at or below their reorder level:</p>
+										</div>
+										<div class="table-container">
+											<table class="low-stock-table">
+												<thead>
+													<tr>
+														<th>Item</th>
+														<th>Category</th>
+														<th>Quantity</th>
+														<th>Reorder Level</th>
+													</tr>
+												</thead>
+												<tbody>
+													${lowStockItems.map((item: any) => `
+														<tr>
+															<td>${item.brand} ${item.model}</td>
+															<td>${item.category || 'N/A'}</td>
+															<td style="text-align: center; color: ${item.quantity === 0 ? '#dc3545' : '#ffc107'}; font-weight: bold;">${item.quantity}</td>
+															<td style="text-align: center;">${item.reorderLevel}</td>
+														</tr>
+													`).join('')}
+												</tbody>
+											</table>
+										</div>
+									`,
+									icon: 'warning',
+									confirmButtonText: 'OK',
+									width: 700,
+									customClass: {
+										popup: 'low-stock-popup'
+									}
+								});
+							}}
+							className='position-relative'>
+							Low Stock Alert
+							<span className='position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger'>
+								{lowStockItems.length}
+								<span className='visually-hidden'>low stock items</span>
+							</span>
+						</Button>
+					)}
 					<Button
 						icon='AddCircleOutline'
 						color='success'
@@ -262,63 +555,47 @@ const Index: NextPage = () => {
 												<td>Error fetching items.</td>
 											</tr>
 										)}
-										{itemAcces &&
-											dataPagination(itemAcces.data, currentPage, perPage)
-												.filter((itemAcces: any) =>
+										{data &&
+											data
+												?.filter((itemAcces: any) =>
 													selectedUsers.length > 0
 														? selectedUsers.includes(itemAcces.type)
 														: true,
 												)
-												
-												// .filter((brand: any) => {
-												// 	const search = searchTerm.toLowerCase();
-												// 	return (
-												// 		brand.code
-												// 			?.toString()
-												// 			.toLowerCase()
-												// 			.includes(searchTerm.slice(0, 4)) ||
-												// 		(brand.brand + ' ' + brand.model)
-												// 			?.toLowerCase()
-												// 			.includes(search) ||
-												// 		(
-												// 			brand.category +
-												// 			' ' +
-												// 			brand.brand +
-												// 			' ' +
-												// 			brand.model
-												// 		)
-												// 			?.toLowerCase()
-												// 			.includes(search) ||
-												// 		(
-												// 			brand.category +
-												// 			' ' +
-												// 			brand.model +
-												// 			' ' +
-												// 			brand.brand
-												// 		)
-												// 			?.toLowerCase()
-												// 			.includes(search) ||
-												// 		brand.model
-												// 			?.toLowerCase()
-												// 			.includes(search) ||
-												// 		brand.brand
-												// 			?.toLowerCase()
-												// 			.includes(search) ||
-												// 		brand.category
-												// 			?.toLowerCase()
-												// 			.includes(search)
-												// 	);
-												// })
-												.sort((a: any, b: any) => b.code - a.code)
+												.filter((itemAcces: any) =>
+													selectedStockTypes.length > 0
+														? selectedStockTypes.includes(itemAcces.mobileType)
+														: true,
+												)
+												.filter((itemAcces: any) =>
+													selectedCategories.length > 0
+														? selectedCategories.includes(itemAcces.category)
+														: true,
+												)
+												.filter((itemAcces: any) =>
+													selectedBrands.length > 0
+														? selectedBrands.includes(itemAcces.brand)
+														: true,
+												)
+												.filter((itemAcces: any) =>
+													selectedModels.length > 0
+														? selectedModels.includes(itemAcces.model)
+														: true,
+												)
 												.map((itemAcces: any, index: any) => (
-													<tr key={index}>
+													<tr key={index} style={getRowStyle(itemAcces)}>
 														<td>{itemAcces.code}</td>
 														<td>{itemAcces.type}</td>
 														{/* <td>{itemAcces.mobileType}</td> */}
 														<td>{itemAcces.category}</td>
 														<td>{itemAcces.model}</td>
 														<td>{itemAcces.brand}</td>
-														<td>{itemAcces.quantity}</td>
+														<td>
+															{itemAcces.quantity}
+															{itemAcces.quantity <= itemAcces.reorderLevel && (
+																<Icon icon='Warning' color='warning' className='ms-2' />
+															)}
+														</td>
 														<td>{itemAcces.reorderLevel}</td>
 														<td>{itemAcces.description}</td>
 														<td>
@@ -337,12 +614,20 @@ const Index: NextPage = () => {
 																icon='CallMissedOutgoing'
 																tag='a'
 																color='warning'
-																onClick={() => (
-																	refetch(),
-																	setEditstockModalStatus(true),
-																	setId(itemAcces.id),
-																	setQuantity(itemAcces.quantity)
-																)}></Button>
+																onClick={() => {
+																	if (itemAcces.quantity <= 0) {
+																		Swal.fire({
+																			icon: 'error',
+																			title: 'No Stock Available',
+																			text: 'Current stock is 0. Stock out operation cannot be performed.',
+																		});
+																		return;
+																	}
+																	refetch();
+																	setEditstockModalStatus(true);
+																	setId(itemAcces.id);
+																	setQuantity(itemAcces.quantity);
+																}}></Button>
 														</td>
 														<td>
 															<Button
@@ -375,7 +660,7 @@ const Index: NextPage = () => {
 								</Button>
 							</CardBody>
 							<PaginationButtons
-								data={itemAcces.data}
+								data={data}
 								label='parts'
 								setCurrentPage={setCurrentPage}
 								currentPage={currentPage}
@@ -393,12 +678,14 @@ const Index: NextPage = () => {
 				isOpen={addstockModalStatus}
 				id={id}
 				quantity={quantity}
+				refetch={refetch}
 			/>
 			<StockOutModal
 				setIsOpen={setEditstockModalStatus}
 				isOpen={editstockModalStatus}
 				id={id}
 				quantity={quantity}
+				refetch={refetch}
 			/>
 			<ItemDeleteModal setIsOpen={setDeleteModalStatus} isOpen={deleteModalStatus} id='' />
 		</PageWrapper>
