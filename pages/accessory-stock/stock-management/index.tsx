@@ -448,7 +448,7 @@ const Index: NextPage = () => {
 														<td>{brand.model}</td>
 														<td>{brand.quantity}</td>
 														<td>{brand.sellingPrice?.toFixed(2)}</td>
-														<td>{typeof brand.cost === 'number' ? brand.cost.toFixed(2) : brand.cost}</td>
+														<td>{brand.cost?.toFixed(2)}</td>
 														<td>{brand.description}</td>
 														<td>{brand.stock}</td>
 													</tr>

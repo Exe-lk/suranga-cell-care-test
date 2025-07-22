@@ -13,7 +13,6 @@ import { useUpdateStockInOutMutation } from '../../redux/slices/stockInOutAcceAp
 import { useGetStockInOutsQuery } from '../../redux/slices/stockInOutAcceApiSlice';
 import { useGetSuppliersQuery } from '../../redux/slices/supplierApiSlice';
 import { useGetDealersQuery } from '../../redux/slices/delearApiSlice';
-import { useUpdateItemAcceMutation } from '../../redux/slices/itemManagementAcceApiSlice';
 import Select from '../bootstrap/forms/Select';
 import { supabase } from '../../lib/supabase';
 
@@ -77,7 +76,6 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 	const { data: stockInData, isSuccess } = useGetItemAcceByIdQuery(id);
 	const [addstockIn, { isLoading }] = useAddStockInMutation();
 	const [updateStockInOut] = useUpdateStockInOutMutation();
-	const [updateItemAcce] = useUpdateItemAcceMutation();
 	const { data: stockInOuts } = useGetStockInOutsQuery(undefined);
 	const [generatedCode, setGeneratedCode] = useState('');
 	const [generatedbarcode, setGeneratedBarcode] = useState<any>();
@@ -337,7 +335,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 					console.log("6-digit Stock-in Code:", stockInCode);
 					console.log("Final barcode:", submissionData.barcode);
 					
-					// 5. Update the item quantity in ItemManagementAcce table
+					// 5. Update the item quantity
 					if (stockIn?.id) {
 						const currentQuantity = parseInt(stockIn.quantity || '0', 10);
 						const addedQuantity = parseInt(values.quantity || '0', 10);
@@ -345,17 +343,11 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 						
 						console.log(`Updating quantity from ${currentQuantity} to ${newQuantity}`);
 						
-						// Call the correct API to update the item quantity in ItemManagementAcce table
-						await updateItemAcce({
+						// Call the update API to update the item quantity
+						await updateStockInOut({
 							id: stockIn.id,
-							type: stockIn.type,
-							mobileType: stockIn.mobileType,
-							category: stockIn.category,
-							model: stockIn.model,
 							quantity: newQuantity,
-							brand: stockIn.brand,
-							code: stockIn.code,
-							status: stockIn.status,
+							type: stockIn.type
 						});
 					}
 					
