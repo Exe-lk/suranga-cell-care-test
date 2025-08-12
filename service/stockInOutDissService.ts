@@ -211,8 +211,11 @@ export const createstockIn = async (values: any) => {
   
 	  for (let i = 0; i < quantity; i++) {
 		const barcodeValue = values.barcode + uniqueId;
+
+
 		subStockRows.push({
-		  stock_id: stockId, // Foreign key to Stock table
+		id:barcodeValue,
+		  stock_id: values.barcode, // Foreign key to Stock table
 		  uniqueId: uniqueId.toString(),
 		  status: false,
 		  barcode: barcodeValue,
@@ -274,11 +277,12 @@ export const createstockIn = async (values: any) => {
 	}
   };
   export const updateSubStock = async (subStockDocId: string, values: any) => {
-	try {
+	try { 
+		console.log(subStockDocId)
 	  const { error } = await supabase
 		.from('subStock')
 		.update(values)
-		.eq('id', subStockDocId);
+		.eq('barcode', subStockDocId);
   
 	  if (error) throw error;
   
@@ -293,7 +297,7 @@ export const createstockIn = async (values: any) => {
 	  const { error } = await supabase
 		.from('subStock')
 		.update({ status: true })
-		.eq('id', subStockId);
+		.eq('barcode', subStockId);
   
 	  if (error) throw error;
   
@@ -308,8 +312,7 @@ export const createstockIn = async (values: any) => {
 	  const { data: stockData, error: stockError } = await supabase
 		.from('Stock')
 		.select(`
-		  *,
-		  subStock:subStock(*) 
+		  *
 		`)
 		.eq('status', true);
   

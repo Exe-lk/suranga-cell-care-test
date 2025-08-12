@@ -68,7 +68,8 @@ const Index: NextPage = () => {
 		error,
 		isLoading,
 		refetch,
-	} = useGetItemDissQuery(debouncedSearchTerm);
+	} = useGetItemDissQuery(undefined);
+
 	const {
 		data: StockInOuts,
 		error: stockInOutError,
@@ -467,6 +468,14 @@ const Index: NextPage = () => {
 		Swal.fire('Import Complete', `Imported: ${success}, Failed: ${fail}`, fail ? 'warning' : 'success');
 	};
 
+	const [startDate, setStartDate] = useState<string>(() => {
+		const today = new Date();
+		const yyyy = today.getFullYear();
+		const mm = String(today.getMonth() + 1).padStart(2, '0');
+		const dd = String(today.getDate()).padStart(2, '0');
+		return `${yyyy}-${mm}-${dd}`;
+	});
+
 	return (
 		<PageWrapper>
 			<SubHeader>
@@ -491,9 +500,10 @@ const Index: NextPage = () => {
 						onChange={(e) => setCategoryFilter(e.target.value)}
 						style={{ minWidth: '120px' }}>
 						<option value=''>All Categories</option>
-						<option value='Display'>Display</option>
-						<option value='Battery'>Battery</option>
+						<option value='Displays'>Display</option>
+						<option value='Battery Cell'>Battery</option>
 						<option value='Screens'>Screens</option>
+						<option value='Touch Pad'>Touch Pad</option>
 					</select>
 					<select
 						className='form-select me-2'
@@ -672,6 +682,15 @@ const Index: NextPage = () => {
 											{itemDiss &&
 												dataPagination(itemDiss, currentPage, perPage)
 													.filter((item: any) => {
+														if (!searchTerm) return true;
+														const codeStr = item.code?.toString().toLowerCase() || '';
+														const modelStr = item.model?.toLowerCase() || '';
+														const search = searchTerm.toLowerCase();
+														const searchFirst4 = search.slice(0, 4);
+														
+														return codeStr.includes(searchFirst4) || modelStr.includes(search);
+													})
+													.filter((item: any) => {
 														// Apply category filter
 														if (categoryFilter && item.category !== categoryFilter) {
 															return false;
@@ -682,6 +701,7 @@ const Index: NextPage = () => {
 														}
 														return true;
 													})
+													.sort((a, b) => b.code - a.code)
 													.map((item: any, index: any) => (
 														<React.Fragment key={index}>
 															<tr key={index} style={getRowStyle(item)}>
