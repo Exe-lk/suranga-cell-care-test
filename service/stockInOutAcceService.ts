@@ -5,10 +5,7 @@ export const createstockIn = async (values: any) => {
 	const status = true;
 	const created_at = new Date(); // Supabase uses JS Date for timestamps
 
-	console.log('=== SERVICE: createstockIn DEBUG START ===');
-	console.log('Raw input values:', values);
-	console.log('Input barcode value:', values.barcode);
-	console.log('Input barcode type:', typeof values.barcode);
+	
 
 	// Handle numeric fields - convert empty strings to null or default values
 	const processedValues = { ...values, status, created_at };
@@ -23,25 +20,63 @@ export const createstockIn = async (values: any) => {
 	if (processedValues.sellingPrice)
 		processedValues.sellingPrice = Number(processedValues.sellingPrice);
 
-	console.log('=== SERVICE: Processed values before DB insert ===');
-	console.log('Processed values:', processedValues);
-	console.log('Final barcode value:', processedValues.barcode);
-	console.log('Final barcode type:', typeof processedValues.barcode);
+	
 
 	const { data, error } = await supabase.from('StockAcce').insert([processedValues]).select('id'); // to return the inserted id
 
-	console.log('=== SERVICE: Database operation result ===');
-	console.log('Supabase insert data:', data);
-	console.log('Supabase insert error:', error);
+	
 
 	if (error) {
-		console.error('=== SERVICE: Error creating stock in ===');
 		console.error('Database error details:', error);
 		return null;
 	}
 
-	console.log('=== SERVICE: createstockIn DEBUG END ===');
-	console.log('Successfully created record with ID:', data?.[0]?.id);
+	console.log('Successfully created stock in record with ID:', data?.[0]?.id);
+
+	// Update the item quantity in ItemManagementAcce table if item ID is provided
+	try {
+		if (!values.cid) {
+			console.log('No item ID provided for stock in quantity update.');
+			return data?.[0]?.id;
+		}
+
+		// Fetch the current item by ID to get the latest quantity
+		const { data: itemData, error: itemError } = await supabase
+			.from('ItemManagementAcce')
+			.select('*')
+			.eq('id', values.cid)
+			.single();
+
+		if (itemError) {
+			console.error('Error finding item in ItemManagementAcce by ID:', itemError);
+			return data?.[0]?.id;
+		}
+
+		console.log('Item data found for stock in:', itemData);
+		if (itemData) {
+			// Calculate new quantity by adding the stock in quantity to current quantity
+			const currentQuantity = Number(itemData.quantity) || 0;
+			const stockInQuantity = Number(values.quantity) || 0;
+			const newQuantity = currentQuantity + stockInQuantity;
+
+			// Update the quantity in ItemManagementAcce table
+			const { error: updateError } = await supabase
+				.from('ItemManagementAcce')
+				.update({ quantity: newQuantity.toString() })
+				.eq('id', itemData.id);
+
+			if (updateError) {
+				console.error('Error updating ItemManagementAcce quantity:', updateError);
+			} else {
+				console.log(`Successfully updated ItemManagementAcce quantity for item ${itemData.id} from ${currentQuantity} to ${newQuantity}`);
+			}
+		} else {
+			console.warn('No matching item found in ItemManagementAcce table for stock in by ID');
+		}
+	} catch (error) {
+		console.error('Error updating ItemManagementAcce quantity by ID:', error);
+	}
+
 	return data?.[0]?.id;
 };
 
@@ -145,6 +180,11 @@ export const createstockOut = async (values: any) => {
 		stock: 'stockOut',
 	};
 
+	// Remove id from processedValues if present
+	if ('id' in processedValues) {
+		delete processedValues.id;
+	}
+
 	// Handle numeric fields
 	if (processedValues.quantity) processedValues.quantity = Number(processedValues.quantity);
 	if (processedValues.cost) processedValues.cost = Number(processedValues.cost);
@@ -161,6 +201,50 @@ export const createstockOut = async (values: any) => {
 	}
 
 	console.log('Stock out created with ID:', data?.[0]?.id);
+
+	try {
+		if (!values.id) {
+			console.error('No item ID provided for stock out.');
+			return data?.[0]?.id;
+		}
+
+		// Fetch the item by ID
+		const { data: itemData, error: itemError } = await supabase
+			.from('ItemManagementAcce')
+			.select('*')
+			.eq('id', values.id)
+			.single();
+
+		if (itemError) {
+			console.error('Error finding item in ItemManagementAcce by ID:', itemError);
+			return data?.[0]?.id;
+		}
+
+		console.log('Item data found for stock out:', itemData);
+		if (itemData) {
+			// Calculate new quantity
+			const currentQuantity = Number(itemData.quantity) || 0;
+			const stockOutQuantity = Number(values.quantity) || 0;
+			const newQuantity = Math.max(0, currentQuantity - stockOutQuantity);
+
+			// Update the quantity in ItemManagementAcce table
+			const { error: updateError } = await supabase
+				.from('ItemManagementAcce')
+				.update({ quantity: newQuantity.toString() })
+				.eq('id', itemData.id);
+
+			if (updateError) {
+				console.error('Error updating ItemManagementAcce quantity:', updateError);
+			} else {
+				console.log(`Successfully updated ItemManagementAcce quantity for item ${itemData.id} from ${currentQuantity} to ${newQuantity}`);
+			}
+		} else {
+			console.warn('No matching item found in ItemManagementAcce table for stock out by ID');
+		}
+	} catch (error) {
+		console.error('Error updating ItemManagementAcce quantity by ID:', error);
+	}
+
 	return data?.[0]?.id;
 };
 

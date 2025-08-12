@@ -11,7 +11,6 @@ import Button from '../bootstrap/Button';
 import Select from '../bootstrap/forms/Select';
 import Swal from 'sweetalert2';
 import Checks, { ChecksGroup } from '../bootstrap/forms/Checks';
-import { useUpdateStockInOutMutation } from '../../redux/slices/stockInOutAcceApiSlice';
 import { useGetItemAccesQuery } from '../../redux/slices/itemManagementAcceApiSlice';
 
 interface StockAddModalProps {
@@ -38,7 +37,7 @@ const formatTimestamp = (seconds: number, nanoseconds: number): string => {
 };
 
 interface StockOut {
-	cid: string;
+	id: string;
 	model: string;
 	brand: string;
 	category: string;
@@ -57,7 +56,7 @@ interface StockOut {
 
 const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity, refetch }) => {
 	const [stockOut, setStockOut] = useState<StockOut>({
-		cid: '',
+		id: '',
 		model: '',
 		brand: '',
 		category: '',
@@ -82,7 +81,6 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 	} = useGetStockInOutsQuery(undefined);
 	const [addstockOut] = useAddStockOutMutation();
 	const { data: stockOutData, isSuccess } = useGetItemAcceByIdQuery(id);
-	const [updateStockInOut] = useUpdateStockInOutMutation();
 
 	useEffect(() => {
 		if (isSuccess && stockOutData) {
@@ -93,7 +91,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 	// Filter for accessory stock-in items only
 	const filteredStockIn = stockInData?.filter(
 		(item: { stock: string; type: string }) => 
-			item.stock === 'stockIn' && item.type === 'Accessory',
+			item.stock === 'stockIn',
 	);
 
 	const handleBarcodeSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,7 +107,6 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 };
 
 	const stockInQuantity = quantity;
-
 	const formik = useFormik({
 		initialValues: {
 			brand: stockOut.brand,
@@ -212,6 +209,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 				// Clone values and ensure numeric fields are properly formatted
 				const processedValues = {
 					...values,
+					id: id, // include id for backend to update item quantity
 					quantity: Number(values.quantity),
 					sellingPrice: Number(values.sellingPrice),
 					cost: values.cost ? Number(values.cost) : null,
@@ -222,8 +220,8 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 				console.log("Submitting stock-out with values:", processedValues);
 				
 				const response = await addstockOut(processedValues).unwrap();
+
 				console.log("Stock-out created response:", response);
-				await updateStockInOut({ id, quantity: updatedQuantity }).unwrap();
 				await refetch();
 				await Swal.fire({ icon: 'success', title: 'Stock Out Created Successfully' });
 				formik.resetForm();
