@@ -571,10 +571,10 @@ const Index: NextPage = () => {
 											<th>Quantity</th>
 											<th>Reorder Level</th>
 											<th>Description</th>
+											{/* <th></th>
 											<th></th>
 											<th></th>
-											<th></th>
-											<th></th>
+											<th></th> */}
 										</tr>
 									</thead>
 									<tbody>
@@ -632,7 +632,7 @@ const Index: NextPage = () => {
 														</td>
 														<td>{itemAcces.reorderLevel}</td>
 														<td>{itemAcces.description}</td>
-														<td>
+														{/* <td>
 															<Button
 																icon='CallReceived'
 																tag='a'
@@ -681,7 +681,7 @@ const Index: NextPage = () => {
 																onClick={() =>
 																	handleClickDelete(itemAcces)
 																}></Button>
-														</td>
+														</td> */}
 													</tr>
 												))}
 									</tbody>

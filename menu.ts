@@ -80,6 +80,7 @@ export const stockAccPagesMenu = {
 		icon: 'AutoStories',
 		subMenu: null,
 	},
+
 	singlePages: {
 		id: 'stock keeper bar1',
 		text: 'Barcode Printing',
@@ -202,8 +203,15 @@ export const AccessoryBillKeeper = {
 	},
 	item1: {
 		id: 'dashboard2',
-		text: 'Product View',
+		text: 'Product View ',
 		path: 'accessory-sales-assitant/item-management',
+		icon: 'DevicesOther',
+		subMenu: null,
+	},
+	item2: {
+		id: 'dashboard2',
+		text: 'Product View Accessories',
+		path: 'accessory-sales-assitant/item-management-acc',
 		icon: 'DevicesOther',
 		subMenu: null,
 	},
@@ -589,6 +597,13 @@ export const addminPagesMenu = {
 		path: 'admin/dealer-management',
 		icon: 'PersonalInjury',
 
+	},
+	stockUpdate: {
+		id: 'dashboard',
+		text: 'Stock Update',
+		path: 'admin/update-stock',
+		icon: 'AutoStories',
+		subMenu: null,
 	},
 	
 	singlePages: {
