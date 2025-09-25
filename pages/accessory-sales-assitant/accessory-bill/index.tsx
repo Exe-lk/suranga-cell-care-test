@@ -533,12 +533,13 @@ function index() {
 					updatedItems[existingItemIndex] = {
 						...selectedItem,
 						quantity: Number(quantity),
+						discount: 0,
 					};
 					setOrderedItems(updatedItems);
 				} else {
 					const updatedItems = [
 						...orderedItems,
-						{ ...selectedItem, quantity, warranty: matchingItem?.warranty },
+						{ ...selectedItem, quantity, warranty: matchingItem?.warranty,discount: 0 },
 					];
 					setOrderedItems(updatedItems);
 				}
