@@ -165,6 +165,19 @@ function index() {
 			return;
 		}
 
+		// Validate contact number format - must start with allowed prefixes
+		const allowedPrefixes = ['70', '71', '72', '74', '75', '76', '77', '78', '79'];
+		const valueStr = String(value);
+		
+		// Check if the contact number starts with any of the allowed prefixes
+		const isValidPrefix = allowedPrefixes.some(prefix => valueStr.startsWith(prefix));
+		
+		if (valueStr.length >= 3 && !isValidPrefix) {
+			// If 3 or more digits entered and doesn't start with valid prefix, show error
+			Swal.fire('Invalid Contact Number', 'Contact number must start with: 070, 071, 072, 074, 075, 076, 077, 078, or 079', 'error');
+			return;
+		}
+
 		// Format the contact number consistently
 		const normalizedInput = normalizeContact(value);
 		if (value.length > 1 && value.startsWith('0')) {
@@ -574,6 +587,22 @@ function index() {
 			return;
 		}
 
+		// Validate contact number format
+		const allowedPrefixes = ['070', '071', '072', '074', '075', '076', '077', '078', '079'];
+		const contactStr = String(contact);
+		const isValidPrefix = allowedPrefixes.some(prefix => contactStr.startsWith(prefix));
+		
+		if (!isValidPrefix) {
+			Swal.fire('Invalid Contact Number', 'Contact number must start with: 070, 071, 072, 074, 075, 076, 077, 078, or 079', 'error');
+			return;
+		}
+
+		// Validate contact number length (should be 10 digits total)
+		if (contactStr.length !== 10) {
+			Swal.fire('Invalid Contact Number', 'Contact number must be exactly 10 digits long.', 'error');
+			return;
+		}
+
 		if (orderedItems.length > 0) {
 			try {
 				// Check if all items have sufficient stock before proceeding
@@ -885,13 +914,24 @@ function index() {
 	// Handle barcode lookup
 	const handleBarcodeChange = async (barcode: string) => {
 		setBarcodeInput(barcode);
-		if (barcode.length >= 4) {
+		if (barcode.length >= 6) {
 			try {
-				// Find matching item from Accstock
-				const stockItem = Accstock?.find((item: any) => item.barcode === barcode);
+
+				
+				let stockItem = null;
+				
+				if (barcode.length > 6) {
+					// If barcode length is greater than 6, check the last 6 digits
+					const last6Digits = barcode.slice(-6);
+					stockItem = Accstock?.find((item: any) => item.code === last6Digits);
+				} else {
+					// If barcode length is exactly 6, use the full barcode
+					stockItem = Accstock?.find((item: any) => item.code === barcode);
+				}
+				
 				if (stockItem) {
 					setCurrentBarcodeData(stockItem);
-					setSelectedProduct(barcode);
+					setSelectedProduct(stockItem.barcode); // Use the actual barcode from stockItem
 				} else {
 					setCurrentBarcodeData(null);
 					setSelectedProduct('');
