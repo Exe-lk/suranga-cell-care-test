@@ -589,7 +589,7 @@ function index() {
 		}
 
 		// Validate contact number format
-		const allowedPrefixes = ['070', '071', '072', '074', '075', '076', '077', '078', '079'];
+		const allowedPrefixes = ['70', '71', '72', '74', '75', '76', '77', '78', '79'];
 		const contactStr = String(contact);
 		const isValidPrefix = allowedPrefixes.some(prefix => contactStr.startsWith(prefix));
 		
@@ -599,7 +599,7 @@ function index() {
 		}
 
 		// Validate contact number length (should be 10 digits total)
-		if (contactStr.length !== 10) {
+		if (contactStr.length !== 9) {
 			Swal.fire('Invalid Contact Number', 'Contact number must be exactly 10 digits long.', 'error');
 			return;
 		}
