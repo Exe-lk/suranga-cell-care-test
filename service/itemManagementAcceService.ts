@@ -97,7 +97,7 @@ export const getItemAcceById = async (id: string) => {
   const { data, error } = await supabase
     .from('ItemManagementAcce')
     .select('*')
-    .eq('code', id)
+    .eq('id', id)
     .single();
 
   if (error) {
