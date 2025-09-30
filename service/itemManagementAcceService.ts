@@ -107,6 +107,20 @@ export const getItemAcceById = async (id: string) => {
 
   return data;
 };
+export const getItemAcceById1 = async (id: string) => {
+  const { data, error } = await supabase
+    .from('ItemManagementAcce')
+    .select('*')
+    .eq('code', id)
+    .single();
+
+  if (error) {
+    console.error(`Error fetching item with ID ${id}:`, error);
+    return null;
+  }
+
+  return data;
+};
 export const updateItemAcce = async (
   id: string,
   type: string,

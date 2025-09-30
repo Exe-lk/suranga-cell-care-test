@@ -433,7 +433,7 @@ function index() {
 
 	const fetchItemByCode = async (code: string) => {
 		try {
-			const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}itemManagementAcce/${code}`);
+			const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}itemManagementAcce/item/${code}`);
 			if (!response.ok) {
 				return null;
 			}
