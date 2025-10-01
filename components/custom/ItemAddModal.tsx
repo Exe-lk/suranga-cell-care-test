@@ -103,6 +103,12 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 			if (!values.brand) {
 				errors.brand = 'Brand is required';
 			}
+			if (!values.warranty) {
+				errors.warranty = 'Warranty is required';
+			}
+			if (!values.reorderLevel) {
+				errors.reorderLevel = 'Reorder Level is required';
+			}
 			return errors;
 		},
 		onSubmit: async (values) => {
