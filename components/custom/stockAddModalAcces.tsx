@@ -216,7 +216,13 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		enableReinitialize: true,
 		validate: (values) => {
 			const errors: Record<string, string> = {};
-			if (values.type === 'Accessory') {
+			if (values.type === 'Mobile') {
+				// For Mobile type, quantity must always be 1
+				if (!values.quantity || values.quantity !== '1') {
+					// Auto-correct the quantity to 1 for Mobile type
+					values.quantity = '1';
+				}
+			} else if (values.type === 'Accessory') {
 				if (!values.quantity) {
 					errors.quantity = 'Quantity is required';
 				} else if (parseInt(values.quantity) <= 0) {
@@ -284,7 +290,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 				console.log("Generated barcode value:", generatedbarcode);
 				console.log("Form values barcode:", values.barcode);
 				console.log("All form values:", values);
-				
+				console.log("Quantity:", values.quantity);
 				// Show processing modal
 				Swal.fire({
 					title: 'Processing...',
@@ -373,6 +379,13 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 			}
 		},
 	});
+
+	// Effect to automatically set quantity to 1 when type is Mobile
+	useEffect(() => {
+		if (formik.values.type === 'Mobile') {
+			formik.setFieldValue('quantity', '1');
+		}
+	}, [formik.values.type]);
 
 	const formatMobileNumber = (value: string) => {
 		let sanitized = value.replace(/\D/g, '');
@@ -565,9 +578,11 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 						className='col-md-6'>
 						<Input
 							type='number'
-							value={1}
+							value={formik.values.quantity || 1}
 							disabled
-							onChange={formik.handleChange}
+							onChange={(e) => {
+								formik.setFieldValue('quantity', '1');
+							}}
 							onBlur={formik.handleBlur}
 							isValid={formik.isValid}
 							isTouched={formik.touched.quantity}
