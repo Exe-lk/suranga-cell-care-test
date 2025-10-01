@@ -558,6 +558,25 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 							)} */}
 						</>
 					)}
+					{formik.values.type === 'Mobile' ? (
+						<FormGroup
+						id='quantity'
+						label='Quantity'
+						className='col-md-6'>
+						<Input
+							type='number'
+							value={1}
+							disabled
+							onChange={formik.handleChange}
+							onBlur={formik.handleBlur}
+							isValid={formik.isValid}
+							isTouched={formik.touched.quantity}
+							invalidFeedback={formik.errors.quantity}
+							validFeedback='Looks good!'
+							min={1}
+						/>
+					</FormGroup>
+					):(
 					<FormGroup
 						id='quantity'
 						label='Quantity'
@@ -574,6 +593,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 							min={1}
 						/>
 					</FormGroup>
+					)}
 
 					<FormGroup id='date' label='Date In' className='col-md-6'>
 						<Input
