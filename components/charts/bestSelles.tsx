@@ -39,7 +39,6 @@ const ColumnWithDataLabels = () => {
 					...doc.data(),
 					cid: doc.id,
 				}));
-
 				// Extract orders and aggregate quantity for each product
 				const productSalesMap = firebaseData.flatMap((bill:any) => bill.orders).reduce(
 					(acc, order) => {
@@ -88,14 +87,6 @@ const ColumnWithDataLabels = () => {
 
 	return (
 		<div className='col-lg-6'>
-			{/* <h2>Top 10 Items Sold This Month</h2>
-			<ul>
-				{topItems.map((item, index) => (
-					<li key={index}>
-						{index + 1}. {item} - Sold: {topqty[index]}
-					</li>
-				))}
-			</ul> */}
 			<Card stretch>
 				<CardHeader>
 					<CardLabel icon='BarChart'>
