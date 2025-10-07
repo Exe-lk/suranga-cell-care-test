@@ -587,6 +587,10 @@ function index() {
 			Swal.fire('Error', 'Contact number is required to print the bill.', 'error');
 			return;
 		}
+		if (!name || String(name).trim() === ''|| name.length < 3) {
+			Swal.fire('Error', 'Name is required to print the bill.', 'error');
+			return;
+		}
 
 		// Validate contact number format
 		const allowedPrefixes = ['70', '71', '72', '74', '75', '76', '77', '78', '79'];
