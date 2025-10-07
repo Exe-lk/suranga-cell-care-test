@@ -7,7 +7,7 @@ import FormGroup from '../bootstrap/forms/FormGroup';
 import Input from '../bootstrap/forms/Input';
 import Button from '../bootstrap/Button';
 import { useAddStockInMutation } from '../../redux/slices/stockInOutAcceApiSlice';
-import { useGetItemAcceByIdQuery } from '../../redux/slices/itemManagementAcceApiSlice';
+import { useGetItemAcceByIdQuery, useGetItemAcces1Query } from '../../redux/slices/itemManagementAcceApiSlice';
 import { useGetItemAccesQuery } from '../../redux/slices/itemManagementAcceApiSlice';
 import { useUpdateStockInOutMutation } from '../../redux/slices/stockInOutAcceApiSlice';
 import { useGetStockInOutsQuery } from '../../redux/slices/stockInOutAcceApiSlice';
@@ -75,7 +75,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 		isError,
 	} = useGetSuppliersQuery(undefined);
 	const { data: stockInData, isSuccess } = useGetItemAcceByIdQuery(id);
-	const [addstockIn, { isLoading }] = useAddStockInMutation();
+	const [addstockIn] = useAddStockInMutation();
 	const [updateStockInOut] = useUpdateStockInOutMutation();
 	const [updateItemAcce] = useUpdateItemAcceMutation();
 	const { data: stockInOuts } = useGetStockInOutsQuery(undefined);
@@ -86,7 +86,12 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 	const [imageurl, setImageurl] = useState<any>(null);
 	const { data: dealers } = useGetDealersQuery(undefined);
 	const { refetch: refetchItemData } = useGetItemAcceByIdQuery(id);
-
+	const {
+		data: itemAcces,
+		error,
+		isLoading,
+		refetch: refetchItemAcces,
+	} = useGetItemAcces1Query({ page: 1, perPage: 10000, lastDoc: null,searchtearm:'' });
 	// Function to generate 6-digit stock-in code sequentially
 	const generateStockInCode = (existingStockInOuts: any[]) => {
 		if (!existingStockInOuts || existingStockInOuts.length === 0) {
@@ -348,6 +353,7 @@ const StockAddModal: FC<StockAddModalProps> = ({ id, isOpen, setIsOpen, quantity
 					// 4. Refresh data and show success
 					await refetch();
 					await refetchItemData(); // Ensure we get the latest item data
+					await refetchItemAcces();
 					await Swal.fire({
 						icon: 'success',
 						title: 'Stock In Added Successfully',
