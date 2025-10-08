@@ -446,8 +446,8 @@ function index() {
 	};
 
 	const handlePopupOk = async () => {
-		if (!currentBarcodeData || quantity <= 0 || quantity > 25) {
-			Swal.fire('Error', 'Please select a product and enter a valid quantity.', 'error');
+		if (!currentBarcodeData || quantity <= 0 || quantity >= 50) {
+			Swal.fire('Error', 'Please select a product and enter a valid quantity (must be less than 50).', 'error');
 			return;
 		}
 		const selectedItem = currentBarcodeData;
@@ -1234,13 +1234,18 @@ function index() {
 										onKeyDown={handleaddKeyPress}
 										onChange={(e: any) => {
 											let value = e.target.value;
-											if (value.length > 1 && value.startsWith('1')) {
-												value = value.substring(1);
+											// if (value.length > 1 && value.startsWith('1')) {
+											// 	value = value.substring(1);
+											// }
+											if (Number(value) >= 51) {
+												Swal.fire('Error', 'Quantity must be less than 50', 'error');
+												return;
 											}
 											setQuantity(value);
 										}}
 										value={quantity}
 										min={1}
+										max={50}
 										validFeedback='Looks good!'
 									/>
 								</FormGroup>
