@@ -26,7 +26,6 @@ import { supabase } from '../../../lib/supabase';
 
 function index() {
 	const [orderedItems, setOrderedItems] = useState<any[]>([]);
-	const { data: Accstock, error, isLoading } = useGetStockInOutsdisQuery(undefined);
 	const [updateStockInOut] = useUpdateStockInOutMutation();
 	// Removed useGetItemAccesQuery since we now use direct database lookup by code
 	// Removed items state - using lazy loading instead
@@ -168,13 +167,17 @@ function index() {
 		// Validate contact number format - must start with allowed prefixes
 		const allowedPrefixes = ['70', '71', '72', '74', '75', '76', '77', '78', '79'];
 		const valueStr = String(value);
-		
+
 		// Check if the contact number starts with any of the allowed prefixes
-		const isValidPrefix = allowedPrefixes.some(prefix => valueStr.startsWith(prefix));
-		
+		const isValidPrefix = allowedPrefixes.some((prefix) => valueStr.startsWith(prefix));
+
 		if (valueStr.length >= 3 && !isValidPrefix) {
 			// If 3 or more digits entered and doesn't start with valid prefix, show error
-			Swal.fire('Invalid Contact Number', 'Contact number must start with: 070, 071, 072, 074, 075, 076, 077, 078, or 079', 'error');
+			Swal.fire(
+				'Invalid Contact Number',
+				'Contact number must start with: 070, 071, 072, 074, 075, 076, 077, 078, or 079',
+				'error',
+			);
 			return;
 		}
 
@@ -276,11 +279,11 @@ function index() {
 		fetchData();
 	}, [orderedItems]);
 
-	useEffect(() => {
-		if (dropdownRef.current) {
-			dropdownRef.current.focus();
-		}
-	}, [Accstock]);
+	// useEffect(() => {
+	// 	if (dropdownRef.current) {
+	// 		dropdownRef.current.focus();
+	// 	}
+	// }, [Accstock]);
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
 			if (document.activeElement === nameRef.current) {
@@ -433,7 +436,9 @@ function index() {
 
 	const fetchItemByCode = async (code: string) => {
 		try {
-			const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}itemManagementAcce/item/${code}`);
+			const response = await fetch(
+				`${process.env.NEXT_PUBLIC_BASE_URL}itemManagementAcce/item/${code}`,
+			);
 			if (!response.ok) {
 				return null;
 			}
@@ -447,7 +452,11 @@ function index() {
 
 	const handlePopupOk = async () => {
 		if (!currentBarcodeData || quantity <= 0 || quantity >= 50) {
-			Swal.fire('Error', 'Please select a product and enter a valid quantity (must be less than 50).', 'error');
+			Swal.fire(
+				'Error',
+				'Please select a product and enter a valid quantity (must be less than 50).',
+				'error',
+			);
 			return;
 		}
 		const selectedItem = currentBarcodeData;
@@ -539,7 +548,12 @@ function index() {
 				} else {
 					const updatedItems = [
 						...orderedItems,
-						{ ...selectedItem, quantity, warranty: matchingItem?.warranty,discount: 0 },
+						{
+							...selectedItem,
+							quantity,
+							warranty: matchingItem?.warranty,
+							discount: 0,
+						},
 					];
 					setOrderedItems(updatedItems);
 				}
@@ -587,7 +601,7 @@ function index() {
 			Swal.fire('Error', 'Contact number is required to print the bill.', 'error');
 			return;
 		}
-		if (!name || String(name).trim() === ''|| name.length < 3) {
+		if (!name || String(name).trim() === '' || name.length < 3) {
 			Swal.fire('Error', 'Name is required to print the bill.', 'error');
 			return;
 		}
@@ -595,16 +609,24 @@ function index() {
 		// Validate contact number format
 		const allowedPrefixes = ['70', '71', '72', '74', '75', '76', '77', '78', '79'];
 		const contactStr = String(contact);
-		const isValidPrefix = allowedPrefixes.some(prefix => contactStr.startsWith(prefix));
-		
+		const isValidPrefix = allowedPrefixes.some((prefix) => contactStr.startsWith(prefix));
+
 		if (!isValidPrefix) {
-			Swal.fire('Invalid Contact Number', 'Contact number must start with: 070, 071, 072, 074, 075, 076, 077, 078, or 079', 'error');
+			Swal.fire(
+				'Invalid Contact Number',
+				'Contact number must start with: 070, 071, 072, 074, 075, 076, 077, 078, or 079',
+				'error',
+			);
 			return;
 		}
 
 		// Validate contact number length (should be 10 digits total)
 		if (contactStr.length !== 9) {
-			Swal.fire('Invalid Contact Number', 'Contact number must be exactly 10 digits long.', 'error');
+			Swal.fire(
+				'Invalid Contact Number',
+				'Contact number must be exactly 10 digits long.',
+				'error',
+			);
 			return;
 		}
 
@@ -725,8 +747,11 @@ function index() {
 
 						// Fetch item directly from database by code
 						const matchingItem = await fetchItemByCode(barcodePrefix);
-						console.log('Found matching item from database for stock update:', matchingItem);
-						
+						console.log(
+							'Found matching item from database for stock update:',
+							matchingItem,
+						);
+
 						if (matchingItem) {
 							const quantity1 = matchingItem.quantity;
 
@@ -921,19 +946,25 @@ function index() {
 		setBarcodeInput(barcode);
 		if (barcode.length >= 6) {
 			try {
-
-				
 				let stockItem = null;
-				
+
 				if (barcode.length > 6) {
 					// If barcode length is greater than 6, check the last 6 digits
 					const last6Digits = barcode.slice(-6);
-					stockItem = Accstock?.find((item: any) => item.code === last6Digits);
+
+					const { data, error } = await supabase
+						.from('StockAcce')
+						.select('*')
+						.eq('code', last6Digits);
+					stockItem = data?.[0];
 				} else {
-					// If barcode length is exactly 6, use the full barcode
-					stockItem = Accstock?.find((item: any) => item.code === barcode);
+					const { data, error } = await supabase
+						.from('StockAcce')
+						.select('*')
+						.eq('code', barcode);
+					stockItem = data?.[0];
 				}
-				
+
 				if (stockItem) {
 					setCurrentBarcodeData(stockItem);
 					setSelectedProduct(stockItem.barcode); // Use the actual barcode from stockItem
@@ -967,29 +998,7 @@ function index() {
 		}
 	};
 
-	if (isLoading) {
-		// console.log(isLoading);
-		return (
-			<PageWrapper>
-				<Page>
-					<div className='row h-100 py-5'>
-						<div className='col-12 text-center py-5 my-5'>
-							<Spinner
-								tag={'div'}
-								color={'primary'}
-								isGrow={false}
-								size={50}
-								className={''}
-							/>
-							<br />
-							<br />
-							<h2>Please Wait</h2>
-						</div>
-					</div>
-				</Page>
-			</PageWrapper>
-		);
-	}
+	
 	return (
 		<>
 			<PageWrapper className=''>
@@ -1103,9 +1112,7 @@ function index() {
 																)}
 															</div>
 														</td>
-														<td>
-															{val.discount}
-														</td>
+														<td>{val.discount}</td>
 														<td className='text-end'>
 															{(
 																val.sellingPrice * val.quantity -
@@ -1218,7 +1225,8 @@ function index() {
 									/>
 									{currentBarcodeData && (
 										<small className='text-success mt-1'>
-											Found: {currentBarcodeData.category} {currentBarcodeData.model} {currentBarcodeData.brand}
+											Found: {currentBarcodeData.category}{' '}
+											{currentBarcodeData.model} {currentBarcodeData.brand}
 										</small>
 									)}
 									{barcodeInput.length >= 4 && !currentBarcodeData && (
@@ -1238,7 +1246,11 @@ function index() {
 											// 	value = value.substring(1);
 											// }
 											if (Number(value) >= 51) {
-												Swal.fire('Error', 'Quantity must be less than 50', 'error');
+												Swal.fire(
+													'Error',
+													'Quantity must be less than 50',
+													'error',
+												);
 												return;
 											}
 											setQuantity(value);
