@@ -31,6 +31,7 @@ function index() {
 	// Removed items state - using lazy loading instead
 	const [selectedBarcode, setSelectedBarcode] = useState<any[]>([]);
 	const [selectedProduct, setSelectedProduct] = useState<string>('');
+	const [warranty, setWarranty] = useState<any>();
 	const [barcodeInput, setBarcodeInput] = useState<string>('');
 	const [currentBarcodeData, setCurrentBarcodeData] = useState<any>(null);
 	const [quantity, setQuantity] = useState<any>(1);
@@ -551,7 +552,7 @@ function index() {
 						{
 							...selectedItem,
 							quantity,
-							warranty: matchingItem?.warranty,
+							warranty: warranty ? (warranty + "day warranty") : matchingItem?.warranty,
 							discount: 0,
 						},
 					];
@@ -998,7 +999,6 @@ function index() {
 		}
 	};
 
-	
 	return (
 		<>
 			<PageWrapper className=''>
@@ -1188,23 +1188,42 @@ function index() {
 						<Card stretch className='mt-4 p-4' style={{ height: '80vh' }}>
 							<CardBody isScrollable>
 								{returnstatus ? (
-									<FormGroup
-										id='return'
-										label='Return Id'
-										className='col-12 mt-2'>
-										<Input
-											// ref={quantityRef}
-											type='number'
-											// onKeyDown={handleaddKeyPress}
-											onChange={(e: any) => {
-												handlereturn(e.target.value),
-													setReturnid(e.target.value);
-											}}
-											value={returnid}
-											min={1}
-											validFeedback='Looks good!'
-										/>
-									</FormGroup>
+									<>
+										<FormGroup
+											id='return'
+											label='Return Id'
+											className='col-12 mt-2'>
+											<Input
+												// ref={quantityRef}
+												type='number'
+												// onKeyDown={handleaddKeyPress}
+												onChange={(e: any) => {
+													handlereturn(e.target.value),
+														setReturnid(e.target.value);
+												}}
+												value={returnid}
+												min={1}
+												validFeedback='Looks good!'
+											/>
+										</FormGroup>
+										<FormGroup
+											id='warranty'
+											label='warranty(In Days)'
+											className='col-12 mt-2'>
+											<Input
+												// ref={quantityRef}
+												type='number'
+												// onKeyDown={handleaddKeyPress}
+												onChange={(e: any) => {
+													
+														setWarranty(e.target.value);
+												}}
+												value={warranty}
+												min={1}
+												validFeedback='Looks good!'
+											/>
+										</FormGroup>
+									</>
 								) : (
 									<div></div>
 								)}
