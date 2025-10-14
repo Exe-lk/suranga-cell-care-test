@@ -986,7 +986,9 @@ function index() {
 	const handleBarcodeKeyPress = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
 			if (currentBarcodeData && quantity > 0) {
-				handlePopupOk();
+				if (quantityRef.current) {
+					quantityRef.current.focus();
+				}
 			} else if (!currentBarcodeData && barcodeInput.length >= 4) {
 				Swal.fire('Error', 'Barcode not found in inventory.', 'error');
 			}
