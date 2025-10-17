@@ -74,7 +74,7 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 
 	const formik = useFormik({
 		initialValues: {
-			code: generatedCode,
+			// code: generatedCode,
 			type: '',
 			mobileType: '',
 			category: '',
@@ -197,7 +197,7 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 			</ModalHeader>
 			<ModalBody className='px-4'>
 				<div className='row g-4'>
-					<FormGroup id='code' label='Generated Code' className='col-md-6'>
+					{/* <FormGroup id='code' label='Generated Code' className='col-md-6'>
 						<Input
 							type='text'
 							value={generatedCode}
@@ -207,7 +207,7 @@ const ItemAddModal: FC<ItemAddModalProps> = ({ id, isOpen, setIsOpen }) => {
 							invalidFeedback={formik.errors.code}
 							validFeedback='Looks good!'
 						/>
-					</FormGroup>
+					</FormGroup> */}
 					<FormGroup id='type' label='Type' className='col-md-6'>
 						<Select
 							ariaLabel='Default select type'
