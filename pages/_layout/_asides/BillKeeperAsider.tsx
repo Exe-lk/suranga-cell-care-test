@@ -30,7 +30,7 @@ const DefaultAside = () => {
 			if (response.ok && email === 'bill keeper') {
 				setIsAuthorized(true);
 			} else {
-				// router.push('/');
+				router.push('/');
 			}
 		};
 

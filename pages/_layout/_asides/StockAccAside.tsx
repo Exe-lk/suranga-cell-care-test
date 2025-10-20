@@ -31,10 +31,10 @@ const DefaultAside = () => {
 				if (response.ok) {
 					setIsAuthorized(true);
 				} else {
-					// router.push('/');
+					router.push('/');
 				}
 			} else {
-				// router.push('/');
+				router.push('/');
 			}
 		};
 
