@@ -215,6 +215,13 @@ export const AccessoryBillKeeper = {
 		icon: 'DevicesOther',
 		subMenu: null,
 	},
+	item3: {
+		id: 'dashboard2',
+		text: 'stock View',
+		path: 'accessory-sales-assitant/item-qty',
+		icon: 'DevicesOther',
+		subMenu: null,
+	},
 	Print: {
 		id: 'print',
 		text: 'Purchasing History',

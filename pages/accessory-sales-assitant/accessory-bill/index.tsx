@@ -312,6 +312,19 @@ function index() {
 		};
 	}, [orderedItems]);
 
+	useEffect(() => {
+		const handlreturn = () => {
+			setOrderedItems([]);
+			setAmount(0);
+			setDiscount(0);
+			setContact(0);
+			setName('');
+			setReturnid('');
+			setReturndata('');
+		};
+		handlreturn();
+	}, [returnstatus]);
+
 	const handleDropdownKeyPress = (e: React.KeyboardEvent) => {
 		if (
 			!/[0-9]/.test(e.key) &&
@@ -592,6 +605,7 @@ function index() {
 						...selectedItem,
 						quantity: Number(quantity),
 						discount: 0,
+						availableQty: availableQty,
 					};
 					setOrderedItems(updatedItems);
 				} else {
@@ -602,6 +616,7 @@ function index() {
 							quantity,
 							warranty: warranty ? warranty + 'day warranty' : matchingItem?.warranty,
 							discount: 0,
+							availableQty: availableQty,
 						},
 					];
 					setOrderedItems(updatedItems);
@@ -806,9 +821,6 @@ function index() {
 
 							const updatedQuantity = quantity1 - quantity;
 							try {
-								console.log(barcodePrefix);
-								console.log(updatedQuantity);
-								// Update the stock directly in Supabase
 								await supabase
 									.from('ItemManagementAcce')
 									.update({ quantity: updatedQuantity })
@@ -820,7 +832,6 @@ function index() {
 							console.warn(`No matching item found for barcode: ${barcode}`);
 						}
 					}
-
 					setOrderedItems([]);
 					setAmount(0);
 					setDiscount(0);
@@ -829,19 +840,14 @@ function index() {
 					setReturnstatus(false);
 					setReturnid('');
 					setReturndata('');
-
 					const printContent: any = invoiceRef.current.innerHTML;
-
 					// Temporarily hide other content on the page
 					const originalContent = document.body.innerHTML;
 					document.body.innerHTML = printContent;
-
 					// Trigger the print dialog
 					window.print();
-
 					// Restore the original content after printing
 					document.body.innerHTML = originalContent;
-
 					Swal.fire({
 						title: 'Success',
 						text: 'Bill has been added successfully.',
@@ -1089,6 +1095,7 @@ function index() {
 											<thead className={'table-dark border-primary'}>
 												<tr>
 													<th>Name</th>
+													<th>Available Qty</th>
 													<th>U/Price(LKR)</th>
 													<th>Qty</th>
 													<th>Unit Selling Price</th>
@@ -1102,6 +1109,9 @@ function index() {
 													<tr key={index}>
 														<td>
 															{val.category} {val.model} {val.brand}
+														</td>
+														<td>
+															{val.availableQty}
 														</td>
 														<td className='text-end'>
 															{val.sellingPrice.toFixed(2)}
@@ -1361,7 +1371,7 @@ function index() {
 									onClick={handlePopupOk}>
 									ADD
 								</Button>
-								<FormGroup id='discount' label='Discount' className='col-12 mt-2'>
+								{/* <FormGroup id='discount' label='Discount' className='col-12 mt-2'>
 									<Input
 										ref={discountRef}
 										type='number'
@@ -1377,7 +1387,7 @@ function index() {
 										min={1}
 										validFeedback='Looks good!'
 									/>
-								</FormGroup>
+								</FormGroup> */}
 								<FormGroup label='Contact Number' className='col-12 mt-3'>
 									<Input
 										ref={contactRef}
