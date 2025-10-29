@@ -523,7 +523,7 @@ function index() {
 		}
 
 		// Ensure barcode lookup is complete before proceeding
-		let selectedItem = null;
+		let selectedItem:any = null;
 		if (barcodeInput.length == 6) {
 			selectedItem = await handleBarcodeChange(barcodeInput);
 		} else if (barcodeInput.length == 10) {
