@@ -513,7 +513,7 @@ function index() {
 	};
 
 	const handlePopupOk = async () => {
-		if (!currentBarcodeData || quantity <= 0 || quantity >= 50) {
+		if (quantity <= 0 || quantity >= 50) {
 			Swal.fire(
 				'Error',
 				'Please select a product and enter a valid quantity (must be less than 50).',
@@ -521,107 +521,94 @@ function index() {
 			);
 			return;
 		}
-		const selectedItem = currentBarcodeData;
+
+		// Ensure barcode lookup is complete before proceeding
+		let selectedItem = null;
+		if (barcodeInput.length == 6) {
+			selectedItem = await handleBarcodeChange(barcodeInput);
+		} else if (barcodeInput.length == 10) {
+			selectedItem = await handleBarcodeChange1(barcodeInput);
+		}
+
+		// Verify that we have valid barcode data
+		if (!selectedItem) {
+			Swal.fire('Error', 'Barcode not found in inventory. Please check and try again.', 'error');
+			return;
+		}
+
 		if (selectedItem) {
-			console.log('Selected item:', selectedItem);
+			// Get the barcode prefix to find matching inventory item directly from database
+			const barcodePrefix = selectedItem.barcode.substring(0, 4);
 
-			if (selectedItem.type == 'displaystock') {
-				const existingItemIndex = orderedItems.findIndex(
-					(item) => item.barcode.slice(0, 4) === selectedProduct.slice(0, 4),
+			// Fetch item directly from database by code
+			const matchingItem = await fetchItemByCode(barcodePrefix);
+
+			if (!matchingItem) {
+				Swal.fire('Error', `Item not found in inventory.`, 'error');
+				return;
+			}
+
+			// Ensure quantities are properly converted to numbers
+			let availableQty = 0;
+			if (matchingItem) {
+				if (typeof matchingItem.quantity === 'string') {
+					availableQty = parseInt(matchingItem.quantity, 10);
+				} else if (typeof matchingItem.quantity === 'number') {
+					availableQty = matchingItem.quantity;
+				}
+			}
+
+			const requestedQty = parseInt(quantity) || 0;
+
+			if (availableQty < requestedQty) {
+				Swal.fire(
+					'Error',
+					`Insufficient stock available for this item. Available: ${availableQty}, Requested: ${requestedQty}`,
+					'error',
 				);
-				const existingItem = orderedItems.find((item) => item.barcode === selectedProduct);
-				if (!existingItem) {
-					const barcode = [...selectedBarcode, selectedProduct];
-					setSelectedBarcode(barcode);
-				}
-				let updatedItems;
-				if (existingItemIndex !== -1) {
-					updatedItems = [...orderedItems];
-					updatedItems[existingItemIndex] = {
-						...selectedItem,
-						quantity: updatedItems[existingItemIndex].quantity + 1,
-					};
-				} else {
-					updatedItems = [...orderedItems, { ...selectedItem, quantity: 1 }];
-				}
-				setOrderedItems(updatedItems);
-			} else {
-				// Get the barcode prefix to find matching inventory item directly from database
-				const barcodePrefix = selectedProduct.substring(0, 4);
-				console.log('Looking for item with code:', barcodePrefix);
+				return;
+			}
+			console.log(orderedItems)
+			console.log(selectedItem)
+			const existingItemIndex = orderedItems.findIndex(
+				(item) => item.barcode === selectedItem.barcode,
+			);
 
-				// Fetch item directly from database by code
-				const matchingItem = await fetchItemByCode(barcodePrefix);
-				console.log('Found matching item from database:', matchingItem);
+			// For existing items, check total quantity against available stock
+			if (existingItemIndex !== -1) {
+				const totalQuantity = parseInt(quantity) || 0;
 
-				if (!matchingItem) {
-					Swal.fire('Error', `Item not found in inventory.`, 'error');
-					return;
-				}
-
-				// Ensure quantities are properly converted to numbers
-				let availableQty = 0;
-				if (matchingItem) {
-					if (typeof matchingItem.quantity === 'string') {
-						availableQty = parseInt(matchingItem.quantity, 10);
-					} else if (typeof matchingItem.quantity === 'number') {
-						availableQty = matchingItem.quantity;
-					}
-				}
-
-				const requestedQty = parseInt(quantity) || 0;
-
-				console.log('Available quantity (parsed):', availableQty);
-				console.log('Requested quantity:', requestedQty);
-
-				if (availableQty < requestedQty) {
+				if (availableQty < totalQuantity) {
 					Swal.fire(
 						'Error',
-						`Insufficient stock available for this item. Available: ${availableQty}, Requested: ${requestedQty}`,
+						`Insufficient stock available for this item. Available: ${availableQty}, Requested: ${totalQuantity}`,
 						'error',
 					);
 					return;
 				}
 
-				const existingItemIndex = orderedItems.findIndex(
-					(item) => item.barcode === selectedProduct,
-				);
-
-				// For existing items, check total quantity against available stock
-				if (existingItemIndex !== -1) {
-					const totalQuantity = parseInt(quantity) || 0;
-
-					if (availableQty < totalQuantity) {
-						Swal.fire(
-							'Error',
-							`Insufficient stock available for this item. Available: ${availableQty}, Requested: ${totalQuantity}`,
-							'error',
-						);
-						return;
-					}
-
-					let updatedItems = [...orderedItems];
-					updatedItems[existingItemIndex] = {
+				let updatedItems = [...orderedItems];
+				updatedItems[existingItemIndex] = {
+					...selectedItem,
+					quantity: Number(quantity),
+					discount: 0,
+					availableQty: availableQty,
+				};
+				setOrderedItems(updatedItems);
+			} else {
+				const updatedItems = [
+					...orderedItems,
+					{
 						...selectedItem,
-						quantity: Number(quantity),
+						quantity,
+						warranty: warranty ? warranty + 'day warranty' : matchingItem?.warranty,
 						discount: 0,
 						availableQty: availableQty,
-					};
-					setOrderedItems(updatedItems);
-				} else {
-					const updatedItems = [
-						...orderedItems,
-						{
-							...selectedItem,
-							quantity,
-							warranty: warranty ? warranty + 'day warranty' : matchingItem?.warranty,
-							discount: 0,
-							availableQty: availableQty,
-						},
-					];
-					setOrderedItems(updatedItems);
-				}
+					},
+				];
+				setOrderedItems(updatedItems);
 			}
+
 			setSelectedProduct('');
 			setBarcodeInput('');
 			setCurrentBarcodeData(null);
@@ -804,33 +791,57 @@ function index() {
 						returnstatus: returnstatus,
 					};
 					await Creatbill(values);
+					
+					// Track any errors during stock update
+					const stockUpdateErrors = [];
+					
 					for (const item of orderedItems) {
 						const { cid, barcode, quantity } = item; // Destructure the fields from the current item
 						const id = cid;
 						const barcodePrefix = barcode.slice(0, 4);
 
-						// Fetch item directly from database by code
-						const matchingItem = await fetchItemByCode(barcodePrefix);
-						console.log(
-							'Found matching item from database for stock update:',
-							matchingItem,
-						);
+						try {
+							// Fetch item directly from database by code
+							const matchingItem = await fetchItemByCode(barcodePrefix);
+							console.log(
+								'Found matching item from database for stock update:',
+								matchingItem,
+							);
 
-						if (matchingItem) {
-							const quantity1 = matchingItem.quantity;
-
-							const updatedQuantity = quantity1 - quantity;
-							try {
-								await supabase
+							if (matchingItem) {
+								const quantity1 = matchingItem.quantity;
+								const updatedQuantity = quantity1 - quantity;
+								
+								const { error: updateError } = await supabase
 									.from('ItemManagementAcce')
 									.update({ quantity: updatedQuantity })
 									.eq('code', barcodePrefix);
-							} catch (error) {
-								console.error(`Failed to update stock for ID: ${id}`, error);
+								
+								if (updateError) {
+									const errorMsg = `Failed to update stock for ${item.category} ${item.model} ${item.brand} (Code: ${barcodePrefix})`;
+									console.error(errorMsg, updateError);
+									stockUpdateErrors.push(errorMsg);
+								}
+							} else {
+								const errorMsg = `No matching item found for barcode: ${barcode}`;
+								console.warn(errorMsg);
+								stockUpdateErrors.push(errorMsg);
 							}
-						} else {
-							console.warn(`No matching item found for barcode: ${barcode}`);
+						} catch (error: any) {
+							const errorMsg = `Error processing ${item.category} ${item.model} ${item.brand}: ${error.message || 'Unknown error'}`;
+							console.error(errorMsg, error);
+							stockUpdateErrors.push(errorMsg);
 						}
+					}
+					
+					// Show errors if any occurred during stock update
+					if (stockUpdateErrors.length > 0) {
+						await Swal.fire({
+							title: 'Stock Update Errors',
+							html: `The following errors occurred while updating stock:<br><br>${stockUpdateErrors.join('<br>')}`,
+							icon: 'warning',
+							confirmButtonText: 'OK'
+						});
 					}
 					setOrderedItems([]);
 					setAmount(0);
@@ -1011,19 +1022,24 @@ function index() {
 		console.log(data);
 		if (error) {
 			console.error('Supabase Error:', error);
+			return null;
 		} else if (data && data.length > 0) {
-			stockItem = await data[0];
+			stockItem = data[0];
 			if (stockItem) {
 				setCurrentBarcodeData(stockItem);
 				setSelectedProduct(stockItem.barcode); // Use the actual barcode from stockItem
+				console.log('✅ Stock Item found:', stockItem);
+				return stockItem; // Return the stock item for immediate use
+			} else {
+				setCurrentBarcodeData(null);
+				setSelectedProduct('');
+				return null;
 			}
-			// else {
-			// 	setCurrentBarcodeData(null);
-			// 	setSelectedProduct('');
-			// }
-			console.log('✅ Stock Item found:', stockItem);
 		} else {
 			console.warn('⚠️ No Stock Item found for code:', last6Digits);
+			setCurrentBarcodeData(null);
+			setSelectedProduct('');
+			return null;
 		}
 	};
 	const handleBarcodeChange = async (barcode: string) => {
@@ -1041,22 +1057,24 @@ function index() {
 				if (stockItem) {
 					setCurrentBarcodeData(stockItem);
 					setSelectedProduct(stockItem.barcode); // Use the actual barcode from stockItem
+					return stockItem; // Return the stock item for immediate use
+				} else {
+					setCurrentBarcodeData(null);
+					setSelectedProduct('');
+					return null;
 				}
-				//  else {
-				// 	setCurrentBarcodeData(null);
-				// 	setSelectedProduct('');
-				// }
 			}
 		} catch (error) {
 			console.error('Error looking up barcode:', error);
 			setCurrentBarcodeData(null);
+			return null;
 		}
 	};
 	const handleBarcodeKeyPress = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
-			if (currentBarcodeData && quantity > 0) {
+			if ( quantity > 0) {
 				handlePopupOk();
-			} else if (!currentBarcodeData && barcodeInput.length >= 4) {
+			} else if ( barcodeInput.length >= 4) {
 				Swal.fire('Error', 'Barcode not found in inventory.', 'error');
 			}
 		}
@@ -1110,9 +1128,7 @@ function index() {
 														<td>
 															{val.category} {val.model} {val.brand}
 														</td>
-														<td>
-															{val.availableQty}
-														</td>
+														<td>{val.availableQty}</td>
 														<td className='text-end'>
 															{val.sellingPrice.toFixed(2)}
 														</td>
@@ -1306,25 +1322,28 @@ function index() {
 										type='text'
 										placeholder='Enter barcode...'
 										className='col-12'
-										onChange={async (
-											e: React.ChangeEvent<HTMLInputElement>,
-										) => {
-											setBarcodeInput(e.target.value);
-											if (e.target.value.length === 10) {
-												await handleBarcodeChange1(e.target.value);
-											} else if (e.target.value.length === 6) {
-												await handleBarcodeChange(e.target.value);
-											} else {
-												setCurrentBarcodeData(null);
-												setSelectedProduct('');
-											}
-										}}
+										// onChange={async (
+										// 	e: React.ChangeEvent<HTMLInputElement>,
+										// ) => {
+										// 	setBarcodeInput(e.target.value);
+										// 	if (e.target.value.length === 10) {
+										// 		await handleBarcodeChange1(e.target.value);
+										// 	} else if (e.target.value.length === 6) {
+										// 		await handleBarcodeChange(e.target.value);
+										// 	} else {
+										// 		setCurrentBarcodeData(null);
+										// 		setSelectedProduct('');
+										// 	}
+										// }}
+										onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
+											setBarcodeInput(e.target.value)
+										}
 										onKeyDown={handleBarcodeKeyPress}
 										value={barcodeInput}
 										validFeedback={currentBarcodeData ? 'Product found!' : ''}
 										isValid={currentBarcodeData ? true : undefined}
 									/>
-									{currentBarcodeData && (
+									{/* {currentBarcodeData && (
 										<small className='text-success mt-1'>
 											Found: {currentBarcodeData.category}{' '}
 											{currentBarcodeData.model} {currentBarcodeData.brand}
@@ -1334,7 +1353,7 @@ function index() {
 										<small className='text-danger mt-1'>
 											Barcode not found in inventory
 										</small>
-									)}
+									)} */}
 								</FormGroup>
 								<FormGroup id='quantity' label='Quantity' className='col-12 mt-2'>
 									<Input
