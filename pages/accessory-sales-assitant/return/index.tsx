@@ -83,10 +83,14 @@ function Index() {
 			const filtered = orders.filter((order: any) => {
 				const billNumber = order.id?.toString() || '';
 				const customerName = order.name?.toLowerCase() || '';
+				const contact = order.contact?.toLowerCase() || '';
 				const searchLower = billSearchTerm.toLowerCase();
-				
-				return billNumber.includes(billSearchTerm) || 
-				       customerName.includes(searchLower);
+
+				return (
+					billNumber.includes(billSearchTerm) ||
+					customerName.includes(searchLower) ||
+					contact.includes(searchLower)
+				);
 			});
 			setFilteredBills(filtered);
 		}
@@ -101,6 +105,7 @@ function Index() {
 			item: '',
 			item1: '',
 			barcode: '',
+			warranty: '',
 			sold_price: '',
 			condition: '',
 			Supplier: '',
@@ -173,19 +178,19 @@ function Index() {
 		},
 		onSubmit: async (values: any) => {
 			try {
-			const process = Swal.fire({
-				title: 'Processing...',
-				html: 'Please wait while the data is being processed.<br><div class="spinner-border" role="status"></div>',
-				allowOutsideClick: false,
-				showCancelButton: false,
-				showConfirmButton: false,
-			});
-			const barcode = values.barcode;
+				const process = Swal.fire({
+					title: 'Processing...',
+					html: 'Please wait while the data is being processed.<br><div class="spinner-border" role="status"></div>',
+					allowOutsideClick: false,
+					showCancelButton: false,
+					showConfirmButton: false,
+				});
+				const barcode = values.barcode;
 				console.log('Barcode:', barcode);
 				console.log('ItemAcces:', itemAcces);
-				
+
 				if (barcode && barcode.length >= 4 && itemAcces && Array.isArray(itemAcces)) {
-				const prefix = barcode.slice(0, 4);
+					const prefix = barcode.slice(0, 4);
 
 					const matchedItem = itemAcces.find((item: any) => {
 						// Add proper type checking for item.code
@@ -195,39 +200,43 @@ function Index() {
 						}
 						return false;
 					});
-					
+
 					console.log('Matched Item:', matchedItem);
-				if (matchedItem) {
-					if (values.condition === 'Good') {
+					if (matchedItem) {
+						if (values.condition === 'Good') {
 							console.log('Current quantity:', Number(matchedItem.quantity));
 							console.log('Return quantity:', values.qyantity);
-						await updateQuantity(
-							matchedItem.id,
-							Number(matchedItem.quantity) + Number(values.qyantity),
-						);
+							await updateQuantity(
+								matchedItem.id,
+								Number(matchedItem.quantity) + Number(values.qyantity),
+							);
+						}
 					}
 				}
-			}
-				
-			refetch();
-			await saveReturnData(values);
-			Swal.fire('Success', 'Return data saved successfully!', 'success');
-			formik.resetForm();
-			setReturnType('');
-			setCondition('');
+
+				refetch();
+				await saveReturnData(values);
+				Swal.fire('Success', 'Return data saved successfully!', 'success');
+				formik.resetForm();
+				setReturnType('');
+				setCondition('');
 				setBillSearchTerm('');
 				setSelectedOrder([]);
 				setShowBillDropdown(false);
 			} catch (error) {
 				console.error('Error in onSubmit:', error);
-				Swal.fire('Error', 'An error occurred while processing the return. Please try again.', 'error');
+				Swal.fire(
+					'Error',
+					'An error occurred while processing the return. Please try again.',
+					'error',
+				);
 			}
 		},
 	});
 	const handlebillClick = async (billId: any, billData?: any) => {
 		console.log(orders);
 		let selectedOrder: any;
-		
+
 		if (billData) {
 			// Called from dropdown selection
 			selectedOrder = billData;
@@ -235,7 +244,7 @@ function Index() {
 			// Called from manual input
 			selectedOrder = orders.find((order: any) => order.id == billId);
 		}
-		
+
 		if (selectedOrder) {
 			console.log('Found Order:', selectedOrder.date);
 			await setSelectedOrder(selectedOrder.orders);
@@ -287,15 +296,12 @@ function Index() {
 				<div className='col-6'>
 					<Card stretch className='mt-4 p-4'>
 						<CardBody>
-							<FormGroup
-								id='Bill_number'
-								label='Bill Number'
-								className='col-md-12'>
+							<FormGroup id='Bill_number' label='Bill Number' className='col-md-12'>
 								<div style={{ position: 'relative' }}>
-								<Input
+									<Input
 										placeholder='Search bill number or customer name...'
 										value={billSearchTerm}
-									onChange={(e: any) => {
+										onChange={(e: any) => {
 											setBillSearchTerm(e.target.value);
 											setShowBillDropdown(true);
 											formik.setFieldValue('Bill_number', e.target.value);
@@ -305,13 +311,13 @@ function Index() {
 											// Delay hiding dropdown to allow for clicks
 											setTimeout(() => setShowBillDropdown(false), 200);
 										}}
-									isValid={formik.isValid}
-									isTouched={formik.touched.Bill_number}
-									invalidFeedback={formik.errors.Bill_number}
-									validFeedback='Looks good!'
-								/>
+										isValid={formik.isValid}
+										isTouched={formik.touched.Bill_number}
+										invalidFeedback={formik.errors.Bill_number}
+										validFeedback='Looks good!'
+									/>
 									{showBillDropdown && (
-										<div 
+										<div
 											style={{
 												position: 'absolute',
 												top: '100%',
@@ -323,9 +329,9 @@ function Index() {
 												maxHeight: '200px',
 												overflowY: 'auto',
 												zIndex: 1000,
-												boxShadow: '0 0.125rem 0.25rem rgba(0, 0, 0, 0.075)'
-											}}
-										>
+												boxShadow:
+													'0 0.125rem 0.25rem rgba(0, 0, 0, 0.075)',
+											}}>
 											{filteredBills.length > 0 ? (
 												filteredBills.slice(0, 10).map((bill: any) => (
 													<div
@@ -334,26 +340,59 @@ function Index() {
 															padding: '8px 12px',
 															cursor: 'pointer',
 															borderBottom: '1px solid #f1f3f4',
-															transition: 'background-color 0.15s ease-in-out'
+															transition:
+																'background-color 0.15s ease-in-out',
 														}}
 														onMouseDown={(e) => e.preventDefault()} // Prevent input blur
-														onClick={() => handlebillClick(bill.id, bill)}
-														onMouseEnter={(e) => (e.target as HTMLElement).style.backgroundColor = '#f8f9fa'}
-														onMouseLeave={(e) => (e.target as HTMLElement).style.backgroundColor = 'white'}
-													>
-														<div style={{ fontWeight: 'bold', fontSize: '14px', color: '#495057' }}>
+														onClick={() =>
+															handlebillClick(bill.id, bill)
+														}
+														onMouseEnter={(e) =>
+															((
+																e.target as HTMLElement
+															).style.backgroundColor = '#f8f9fa')
+														}
+														onMouseLeave={(e) =>
+															((
+																e.target as HTMLElement
+															).style.backgroundColor = 'white')
+														}>
+														<div
+															style={{
+																fontWeight: 'bold',
+																fontSize: '14px',
+																color: '#495057',
+															}}>
 															Bill #{bill.id}
 														</div>
-														<div style={{ fontSize: '12px', color: '#6c757d', marginTop: '2px' }}>
-															Customer: {bill.name || 'N/A'} - {bill.contact || 'N/A'}
+														<div
+															style={{
+																fontSize: '12px',
+																color: '#6c757d',
+																marginTop: '2px',
+															}}>
+															Customer: {bill.name || 'N/A'} -{' '}
+															{bill.contact || 'N/A'}
 														</div>
-														<div style={{ fontSize: '12px', color: '#6c757d', marginTop: '2px' }}>
-															Date: {bill.date || 'N/A'} - Amount: ${bill.amount || 0}
+														<div
+															style={{
+																fontSize: '12px',
+																color: '#6c757d',
+																marginTop: '2px',
+															}}>
+															Date: {bill.date || 'N/A'} - Amount: $
+															{bill.amount || 0}
 														</div>
 													</div>
 												))
 											) : (
-												<div style={{ padding: '12px', textAlign: 'center', color: '#6c757d', fontSize: '14px' }}>
+												<div
+													style={{
+														padding: '12px',
+														textAlign: 'center',
+														color: '#6c757d',
+														fontSize: '14px',
+													}}>
 													No bills found
 												</div>
 											)}
@@ -387,6 +426,7 @@ function Index() {
 											formik.setFieldValue('qyantity', order.quantity);
 											formik.setFieldValue('Supplier', order.suppName);
 											formik.setFieldValue('barcode', order.barcode);
+											formik.setFieldValue('warranty', order.warranty);
 											setQuantity(order.quantity);
 											setSellingPrice(
 												order.sellingPrice -
@@ -527,6 +567,19 @@ function Index() {
 									isValid={formik.isValid}
 									isTouched={formik.touched.date_sold}
 									invalidFeedback={formik.errors.date_sold}
+									validFeedback='Looks good!'
+								/>
+							</FormGroup>
+							<FormGroup id='warranty' label='Warranty' className='col-md-12'>
+								<Input
+									// type='date'
+									disabled
+									onChange={formik.handleChange}
+									value={formik.values.warranty}
+									onBlur={formik.handleBlur}
+									isValid={formik.isValid}
+									isTouched={formik.touched.warranty}
+									invalidFeedback={formik.errors.warranty}
 									validFeedback='Looks good!'
 								/>
 							</FormGroup>
