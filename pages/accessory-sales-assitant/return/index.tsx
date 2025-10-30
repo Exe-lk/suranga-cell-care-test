@@ -30,6 +30,7 @@ function Index() {
 	const [showSellingPrice, setShowSellingPrice] = useState(false);
 	const [showDropdown, setShowDropdown] = useState(false);
 	const [dropdownOptions, setDropdownOptions] = useState([]);
+	const [returndata, setReturndata] = useState<any[]>([]);
 	const [orders, setOrders] = useState([]);
 	const [selectedorder, setSelectedOrder] = useState<any[]>([]);
 	const [billSearchTerm, setBillSearchTerm] = useState('');
@@ -95,6 +96,29 @@ function Index() {
 			setFilteredBills(filtered);
 		}
 	}, [billSearchTerm, orders]);
+	const handleitemsearch = async (billId: any, barcode?: any) => {
+		const { data, error }: any = await supabase
+			.from('return')
+			.select('qyantity')
+			.eq('barcode', barcode)
+			.eq('Bill_number', billId);
+
+		if (error) throw error;
+		if (data && data.length > 0) {
+			console.log('Return Data:', data);
+
+			// Sum all quantities
+			const totalQuantity = data.reduce(
+				(sum: any, item: any) => sum + (item.qyantity || 0),
+				0,
+			);
+
+			return totalQuantity;
+		} else {
+			// setReturndata('');
+			return 0;
+		}
+	};
 
 	const currentDate = new Date().toLocaleDateString();
 	const formik = useFormik({
@@ -104,6 +128,7 @@ function Index() {
 			Bill_number: '',
 			item: '',
 			item1: '',
+			itemId: '',
 			barcode: '',
 			warranty: '',
 			sold_price: '',
@@ -189,30 +214,30 @@ function Index() {
 				console.log('Barcode:', barcode);
 				console.log('ItemAcces:', itemAcces);
 
-				if (barcode && barcode.length >= 4 && itemAcces && Array.isArray(itemAcces)) {
-					const prefix = barcode.slice(0, 4);
+				// if (barcode && barcode.length >= 4 && itemAcces && Array.isArray(itemAcces)) {
+				// 	const prefix = barcode.slice(0, 4);
 
-					const matchedItem = itemAcces.find((item: any) => {
-						// Add proper type checking for item.code
-						if (item && item.code) {
-							const code = String(item.code); // Convert to string to ensure startsWith works
-							return code.startsWith(prefix);
-						}
-						return false;
-					});
+				// 	const matchedItem = itemAcces.find((item: any) => {
+				// 		// Add proper type checking for item.code
+				// 		if (item && item.code) {
+				// 			const code = String(item.code); // Convert to string to ensure startsWith works
+				// 			return code.startsWith(prefix);
+				// 		}
+				// 		return false;
+				// 	});
 
-					console.log('Matched Item:', matchedItem);
-					if (matchedItem) {
-						if (values.condition === 'Good') {
-							console.log('Current quantity:', Number(matchedItem.quantity));
-							console.log('Return quantity:', values.qyantity);
-							await updateQuantity(
-								matchedItem.id,
-								Number(matchedItem.quantity) + Number(values.qyantity),
-							);
-						}
-					}
-				}
+				// 	console.log('Matched Item:', matchedItem);
+				// 	if (matchedItem) {
+				// 		if (values.condition === 'Good') {
+				// 			console.log('Current quantity:', Number(matchedItem.quantity));
+				// 			console.log('Return quantity:', values.qyantity);
+				// 			await updateQuantity(
+				// 				matchedItem.id,
+				// 				Number(matchedItem.quantity) + Number(values.qyantity),
+				// 			);
+				// 		}
+				// 	}
+				// }
 
 				refetch();
 				await saveReturnData(values);
@@ -405,33 +430,44 @@ function Index() {
 									id='item1'
 									name='item1'
 									ariaLabel='item1'
-									onChange={(e: any) => {
+									onChange={async (e: any) => {
 										// Get selected index
 										const selectedIndex = e.target.value;
 										// Get the corresponding object from selectedorder
 										const order = selectedorder[selectedIndex];
 
-										if (order) {
-											console.log(order);
-											formik.setFieldValue(
-												'item',
-												`${order.category} ${order.brand} ${order.model}`,
-											);
-											formik.setFieldValue('item1', selectedIndex);
-											formik.setFieldValue(
-												'sold_price',
-												order.sellingPrice * order.quantity -
-													order.discount,
-											);
-											formik.setFieldValue('qyantity', order.quantity);
-											formik.setFieldValue('Supplier', order.suppName);
-											formik.setFieldValue('barcode', order.barcode);
-											formik.setFieldValue('warranty', order.warranty);
-											setQuantity(order.quantity);
-											setSellingPrice(
-												order.sellingPrice -
-													order.discount / order.quantity,
-											);
+										const Quantity = await handleitemsearch(
+											formik.values.Bill_number,
+											order.barcode,
+										);
+										console.log(Quantity);
+										console.log(order.quantity)
+										if (Quantity < order.quantity){
+											if (order) {
+												console.log(order);
+												formik.setFieldValue(
+													'item',
+													`${order.category} ${order.brand} ${order.model}`,
+												);
+												formik.setFieldValue('item1', selectedIndex);
+												formik.setFieldValue(
+													'sold_price',
+													order.sellingPrice * order.quantity -
+														order.discount,
+												);
+												formik.setFieldValue('qyantity', order.quantity);
+												formik.setFieldValue('Supplier', order.suppName);
+												formik.setFieldValue('barcode', order.barcode);
+												formik.setFieldValue('warranty', order.warranty);
+												formik.setFieldValue('itemId', order.barcode);
+												setQuantity(order.quantity);
+												setSellingPrice(
+													order.sellingPrice -
+														order.discount / order.quantity,
+												);
+											}
+										}else{
+											Swal.fire('Error', 'Quantity exceeds available stock', 'error');
 										}
 									}}
 									value={formik.values.item1}
@@ -450,17 +486,21 @@ function Index() {
 							<FormGroup id='qyantity' label='Quantity' className='col-md-12'>
 								<Input
 									type='number'
+									name='qyantity'
 									onChange={(e: any) => {
-										const selectedquantity = e.target.value;
+										const selectedquantity = Number(e.target.value);
 										if (selectedquantity <= quantity && selectedquantity >= 1) {
 											formik.setFieldValue('qyantity', selectedquantity);
 											formik.setFieldValue(
 												'sold_price',
 												Number(sellingPrice) * selectedquantity,
 											);
+										} else if (!selectedquantity || selectedquantity === 0) {
+											formik.setFieldValue('qyantity', '');
 										}
 									}}
 									min={1}
+									max={quantity}
 									value={formik.values.qyantity}
 									onBlur={formik.handleBlur}
 									isValid={formik.isValid}
