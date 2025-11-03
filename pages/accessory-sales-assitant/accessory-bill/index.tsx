@@ -9,6 +9,7 @@ import { Dropdown } from 'primereact/dropdown';
 import FormGroup from '../../../components/bootstrap/forms/FormGroup';
 import Input from '../../../components/bootstrap/forms/Input';
 import Button from '../../../components/bootstrap/Button';
+import Modal, { ModalBody, ModalFooter, ModalHeader, ModalTitle } from '../../../components/bootstrap/Modal';
 import Checks, { ChecksGroup } from '../../../components/bootstrap/forms/Checks';
 import {
 	useGetStockInOutsQuery as useGetStockInOutsdisQuery,
@@ -54,6 +55,8 @@ function index() {
 	const [returndata, setReturndata] = useState<any>('');
 	const [returnid, setReturnid] = useState<any>('');
 	const [name, setName] = useState<string>('');
+	const [showItemSelectionModal, setShowItemSelectionModal] = useState<boolean>(false);
+	const [multipleStockItems, setMultipleStockItems] = useState<any[]>([]);
 	const dropdownRef = useRef<HTMLInputElement>(null);
 	const quantityRef = useRef<HTMLInputElement>(null);
 	const discountRef = useRef<HTMLInputElement>(null);
@@ -522,17 +525,25 @@ function index() {
 			return;
 		}
 
-		// Ensure barcode lookup is complete before proceeding
-		let selectedItem:any = null;
-		if (barcodeInput.length == 6) {
-			selectedItem = await handleBarcodeChange(barcodeInput);
-		} else if (barcodeInput.length == 10) {
-			selectedItem = await handleBarcodeChange1(barcodeInput);
+		// Use currentBarcodeData if available (from modal selection or barcode lookup)
+		let selectedItem:any = currentBarcodeData;
+		
+		// If no current data, try to fetch by barcode input
+		if (!selectedItem) {
+			if (barcodeInput.length == 6) {
+				selectedItem = await handleBarcodeChange(barcodeInput);
+			} else if (barcodeInput.length == 10) {
+				selectedItem = await handleBarcodeChange1(barcodeInput);
+			}
 		}
 
 		// Verify that we have valid barcode data
 		if (!selectedItem) {
-			Swal.fire('Error', 'Barcode not found in inventory. Please check and try again.', 'error');
+			Swal.fire(
+				'Error',
+				'Barcode not found in inventory. Please check and try again.',
+				'error',
+			);
 			return;
 		}
 
@@ -1018,12 +1029,18 @@ function index() {
 		const { data, error } = await supabase
 			.from('StockAcce')
 			.select('*')
-			.eq('code', last6Digits);
+			.eq('barcode', barcode);
 		console.log(data);
 		if (error) {
 			console.error('Supabase Error:', error);
 			return null;
-		} else if (data && data.length > 0) {
+		} else if (data && data.length > 1) {
+			// Multiple items found - show selection modal
+			console.log('✅ Multiple items found:', data.length);
+			setMultipleStockItems(data);
+			setShowItemSelectionModal(true);
+			return null; // Return null and wait for user selection
+		} else if (data && data.length === 1) {
 			stockItem = data[0];
 			if (stockItem) {
 				setCurrentBarcodeData(stockItem);
@@ -1052,12 +1069,28 @@ function index() {
 					.from('StockAcce')
 					.select('*')
 					.eq('code', barcode);
-				stockItem = data?.[0];
-				console.log(stockItem);
-				if (stockItem) {
-					setCurrentBarcodeData(stockItem);
-					setSelectedProduct(stockItem.barcode); // Use the actual barcode from stockItem
-					return stockItem; // Return the stock item for immediate use
+				
+				if (error) {
+					console.error('Supabase Error:', error);
+					return null;
+				} else if (data && data.length > 1) {
+					// Multiple items found - show selection modal
+					console.log('✅ Multiple items found:', data.length);
+					setMultipleStockItems(data);
+					setShowItemSelectionModal(true);
+					return null; // Return null and wait for user selection
+				} else if (data && data.length === 1) {
+					stockItem = data[0];
+					console.log(stockItem);
+					if (stockItem) {
+						setCurrentBarcodeData(stockItem);
+						setSelectedProduct(stockItem.barcode); // Use the actual barcode from stockItem
+						return stockItem; // Return the stock item for immediate use
+					} else {
+						setCurrentBarcodeData(null);
+						setSelectedProduct('');
+						return null;
+					}
 				} else {
 					setCurrentBarcodeData(null);
 					setSelectedProduct('');
@@ -1070,12 +1103,25 @@ function index() {
 			return null;
 		}
 	};
-	const handleBarcodeKeyPress = (e: React.KeyboardEvent) => {
+const handleBarcodeKeyPress = async (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
-			if ( quantity > 0) {
-				handlePopupOk();
-			} else if ( barcodeInput.length >= 4) {
-				Swal.fire('Error', 'Barcode not found in inventory.', 'error');
+			e.preventDefault();
+			if (barcodeInput.length === 10) {
+				const result = await handleBarcodeChange1(barcodeInput);
+				if (result || currentBarcodeData) {
+					handlePopupOk();
+				} else {
+					Swal.fire('Error', 'Barcode not found in inventory.', 'error');
+				}
+			} else if (barcodeInput.length === 6) {
+				const result = await handleBarcodeChange(barcodeInput);
+				if (result || currentBarcodeData) {
+					handlePopupOk();
+				} else {
+					Swal.fire('Error', 'Barcode not found in inventory.', 'error');
+				}
+			} else {
+				Swal.fire('Error', 'Enter a valid 6 or 10 digit barcode.', 'error');
 			}
 		}
 		if (e.key === 'ArrowDown') {
@@ -1084,6 +1130,22 @@ function index() {
 			}
 			e.preventDefault();
 		}
+	};
+
+	// Handle item selection from modal
+	const handleItemSelection = (selectedItem: any) => {
+		setCurrentBarcodeData(selectedItem);
+		setSelectedProduct(selectedItem.barcode);
+		setBarcodeInput(selectedItem.barcode); // Update barcode input to match selected item
+		setShowItemSelectionModal(false);
+		setMultipleStockItems([]);
+		console.log('✅ User selected item:', selectedItem);
+		// Focus on quantity input after selection
+		setTimeout(() => {
+			if (quantityRef.current) {
+				quantityRef.current.focus();
+			}
+		}, 100);
 	};
 
 	return (
@@ -1454,6 +1516,71 @@ function index() {
 							</CardFooter>
 						</Card>
 					</div>
+
+					{/* Item Selection Modal */}
+					<Modal
+						isOpen={showItemSelectionModal}
+						setIsOpen={setShowItemSelectionModal}
+						size='lg'
+						isCentered>
+						<ModalHeader setIsOpen={setShowItemSelectionModal}>
+							<ModalTitle id={''}>Select Item</ModalTitle>
+						</ModalHeader>
+						<ModalBody>
+							<p className='text-muted mb-3'>
+								Multiple items found for this barcode. Please select one:
+							</p>
+							<div className='table-responsive'>
+								<table className='table table-hover table-bordered'>
+									<thead className='table-light'>
+										<tr>
+											<th>Barcode</th>
+											<th>Category</th>
+											<th>Brand</th>
+											<th>Model</th>
+											<th>Price (LKR)</th>
+											<th>Action</th>
+										</tr>
+									</thead>
+									<tbody>
+										{multipleStockItems.map((item, index) => (
+											<tr key={index}>
+												<td>{item.barcode}</td>
+												<td>{item.category}</td>
+												<td>{item.brand}</td>
+												<td>{item.model}</td>
+												<td className='text-end'>
+													{item.sellingPrice?.toFixed(2)}
+												</td>
+												<td>
+													<Button
+														color='primary'
+														size='sm'
+														onClick={() => handleItemSelection(item)}>
+														Select
+													</Button>
+												</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						</ModalBody>
+						<ModalFooter>
+							<Button
+								color='secondary'
+								onClick={() => {
+									setShowItemSelectionModal(false);
+									setMultipleStockItems([]);
+									setBarcodeInput('');
+									if (dropdownRef.current) {
+										dropdownRef.current.focus();
+									}
+								}}>
+								Cancel
+							</Button>
+						</ModalFooter>
+					</Modal>
 
 					<Card hidden stretch className='mt-4' style={{ height: '80vh' }}>
 						<CardBody isScrollable>

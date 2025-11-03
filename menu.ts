@@ -80,6 +80,13 @@ export const stockAccPagesMenu = {
 		icon: 'AutoStories',
 		subMenu: null,
 	},
+		return1: {
+		id: 'dashboard',
+		text: 'Return Quantity',
+		path: 'accessory-stock/return-qty',
+		icon: 'AutoStories',
+		subMenu: null,
+	},
 
 	singlePages: {
 		id: 'stock keeper bar1',
