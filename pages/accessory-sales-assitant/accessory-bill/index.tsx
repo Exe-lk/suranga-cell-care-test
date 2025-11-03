@@ -538,14 +538,7 @@ function index() {
 		}
 
 		// Verify that we have valid barcode data
-		if (!selectedItem) {
-			Swal.fire(
-				'Error',
-				'Barcode not found in inventory. Please check and try again.',
-				'error',
-			);
-			return;
-		}
+		
 
 		if (selectedItem) {
 			// Get the barcode prefix to find matching inventory item directly from database
@@ -555,6 +548,11 @@ function index() {
 			const matchingItem = await fetchItemByCode(barcodePrefix);
 
 			if (!matchingItem) {
+				selectedItem = null;
+				setSelectedProduct('');
+				setBarcodeInput('');
+				setCurrentBarcodeData(null);
+				setQuantity(1);
 				Swal.fire('Error', `Item not found in inventory.`, 'error');
 				return;
 			}
@@ -572,6 +570,11 @@ function index() {
 			const requestedQty = parseInt(quantity) || 0;
 
 			if (availableQty < requestedQty) {
+				selectedItem = null;
+				setSelectedProduct('');
+				setBarcodeInput('');
+				setCurrentBarcodeData(null);
+				setQuantity(1);
 				Swal.fire(
 					'Error',
 					`Insufficient stock available for this item. Available: ${availableQty}, Requested: ${requestedQty}`,
@@ -1103,25 +1106,12 @@ function index() {
 			return null;
 		}
 	};
-const handleBarcodeKeyPress = async (e: React.KeyboardEvent) => {
+	const handleBarcodeKeyPress = (e: React.KeyboardEvent) => {
 		if (e.key === 'Enter') {
-			e.preventDefault();
-			if (barcodeInput.length === 10) {
-				const result = await handleBarcodeChange1(barcodeInput);
-				if (result || currentBarcodeData) {
-					handlePopupOk();
-				} else {
-					Swal.fire('Error', 'Barcode not found in inventory.', 'error');
-				}
-			} else if (barcodeInput.length === 6) {
-				const result = await handleBarcodeChange(barcodeInput);
-				if (result || currentBarcodeData) {
-					handlePopupOk();
-				} else {
-					Swal.fire('Error', 'Barcode not found in inventory.', 'error');
-				}
-			} else {
-				Swal.fire('Error', 'Enter a valid 6 or 10 digit barcode.', 'error');
+			if ( quantity > 0) {
+				handlePopupOk();
+			} else if ( barcodeInput.length >= 4) {
+				Swal.fire('Error', 'Barcode not found in inventory.', 'error');
 			}
 		}
 		if (e.key === 'ArrowDown') {
