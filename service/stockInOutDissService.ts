@@ -238,6 +238,13 @@ export const createstockIn = async (values: any) => {
 	}
   };
   export const getstockInByDate = async (date: string, searchTerm: any) => {
+	// #region agent log
+	const funcStartTime = Date.now();
+	const logEntry6 = {location:'service/stockInOutDissService.ts:240',message:'getstockInByDate function entry',data:{date:date||'',searchTerm:searchTerm||''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,E'};
+	console.log('[DEBUG]', JSON.stringify(logEntry6));
+	fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry6)}).catch(()=>{});
+	// #endregion
+	
 	let query = supabase
 	  .from('Stock')
 	  .select('*')
@@ -253,13 +260,40 @@ export const createstockIn = async (values: any) => {
 	  query = query.or(`barcode.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,brand.ilike.%${searchTerm}%,model.ilike.%${searchTerm}%,suppName.ilike.%${searchTerm}%`);
 	}
   
+	// #region agent log
+	const queryStartTime = Date.now();
+	const logEntry7 = {location:'service/stockInOutDissService.ts:256',message:'Before Supabase query execution',data:{hasDateFilter:!!date,hasSearchFilter:!!searchTerm},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C,E'};
+	console.log('[DEBUG]', JSON.stringify(logEntry7));
+	fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry7)}).catch(()=>{});
+	// #endregion
+	
 	const { data, error } = await query;
+	const queryDuration = Date.now() - queryStartTime;
+	
+	// #region agent log
+	const logEntry8 = {location:'service/stockInOutDissService.ts:258',message:'After Supabase query execution',data:{queryDuration,hasError:!!error,hasData:!!data,dataLength:data?.length||0,errorMessage:error?.message||'',errorCode:error?.code||'',errorDetails:error?.details||''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,E'};
+	console.log('[DEBUG]', JSON.stringify(logEntry8));
+	if (error) console.error('[ERROR] Supabase query error:', error);
+	fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry8)}).catch(()=>{});
+	// #endregion
   
 	if (error) {
 	  console.error('Error fetching stock by date with search:', error);
+	  // #region agent log
+	  const funcDuration = Date.now() - funcStartTime;
+	  const logEntry9 = {location:'service/stockInOutDissService.ts:262',message:'getstockInByDate error path',data:{funcDuration,errorMessage:error.message,errorCode:error.code,errorDetails:error.details},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B,E'};
+	  console.log('[DEBUG]', JSON.stringify(logEntry9));
+	  fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry9)}).catch(()=>{});
+	  // #endregion
 	  return [];
 	}
   
+	// #region agent log
+	const funcDuration = Date.now() - funcStartTime;
+	const logEntry10 = {location:'service/stockInOutDissService.ts:267',message:'getstockInByDate success exit',data:{funcDuration,dataLength:data?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,C'};
+	console.log('[DEBUG]', JSON.stringify(logEntry10));
+	fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry10)}).catch(()=>{});
+	// #endregion
 	return data;
   };
   export const getAllSubStockData = async () => {
