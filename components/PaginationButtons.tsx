@@ -12,6 +12,7 @@ export const PER_COUNT = {
 	25: 25,
 	50: 50,
 	100:100,
+	500: 500,
 	1000: 1000,
 	2000: 2000,
 	4000: 4000,
@@ -35,6 +36,7 @@ interface IPaginationButtonsProps {
 	setPerPage(...args: unknown[]): unknown;
 	data: unknown[];
 	label: string;
+	total?: number; // Optional total for server-side pagination
 }
 const PaginationButtons: FC<IPaginationButtonsProps> = ({
 	setCurrentPage,
@@ -43,8 +45,10 @@ const PaginationButtons: FC<IPaginationButtonsProps> = ({
 	setPerPage,
 	data,
 	label,
+	total,
 }) => {
-	const totalItems = data?.length;
+	// Use total prop if provided (server-side pagination), otherwise use data length (client-side)
+	const totalItems = total !== undefined ? total : (data?.length || 0);
 	const totalPage = Math.ceil(totalItems / perPage);
 
 	const pagination = () => {
@@ -85,12 +89,11 @@ const PaginationButtons: FC<IPaginationButtonsProps> = ({
 
 	const getInfo = () => {
 		const start = perPage * (currentPage - 1) + 1;
-
-		const end = perPage * currentPage;
+		const end = Math.min(perPage * currentPage, totalItems);
 
 		return (
 			<span className='pagination__desc'>
-				Showing {start} to {end > totalItems ? totalItems : end} of {totalItems} {label}
+				Showing {start} to {end} of {totalItems} {label}
 			</span>
 		);
 	};

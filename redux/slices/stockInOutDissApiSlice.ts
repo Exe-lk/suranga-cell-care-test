@@ -16,8 +16,8 @@ export const stockInOutApiSlice = createApi({
 			providesTags: ['StockInOut'],
 		}),
 		getStockInOutByDate: builder.query({
-			query: ({ startDate, searchtearm }) => ({
-				url: `stockInOut/route1?date=${startDate}&searchTerm=${searchtearm || ''}`,
+			query: ({ startDate, searchtearm, page = 1, limit = 500 }) => ({
+				url: `stockInOut/route1?date=${startDate}&searchTerm=${searchtearm || ''}&page=${page}&limit=${limit}`,
 			}),
 			providesTags: ['StockInOut'],
 		}),

@@ -29,24 +29,30 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 				break;
 			}
 			case 'GET': {
-				const { date, searchTerm } = req.query;
+				const { date, searchTerm, page, limit } = req.query;
+				
+				// Parse page and limit, with defaults
+				const pageNum = page ? parseInt(page as string, 10) : 1;
+				const limitNum = limit ? parseInt(limit as string, 10) : 500;
 				
 				// #region agent log
-				const logEntry2 = {location:'pages/api/stockInOut/route1.ts:28',message:'Before getstockInByDate call',data:{date:date as string||'',searchTerm:searchTerm as string||''},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'};
+				const logEntry2 = {location:'pages/api/stockInOut/route1.ts:28',message:'Before getstockInByDate call',data:{date:date as string||'',searchTerm:searchTerm as string||'',page:pageNum,limit:limitNum},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'};
 				console.log('[DEBUG]', JSON.stringify(logEntry2));
 				fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry2)}).catch(()=>{});
 				// #endregion
 				
-				// Use the updated service function that supports search terms
+				// Use the updated service function that supports search terms and pagination
 				const queryStartTime = Date.now();
 				const stockData = await getstockInByDate(
 					date as string || '', 
-					searchTerm as string || ''
+					searchTerm as string || '',
+					pageNum,
+					limitNum
 				);
 				const queryDuration = Date.now() - queryStartTime;
 				
 				// #region agent log
-				const logEntry3 = {location:'pages/api/stockInOut/route1.ts:36',message:'After getstockInByDate call',data:{queryDuration,dataLength:stockData?.length||0,hasData:!!stockData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'};
+				const logEntry3 = {location:'pages/api/stockInOut/route1.ts:36',message:'After getstockInByDate call',data:{queryDuration,dataLength:stockData?.data?.length||0,total:stockData?.total||0,hasData:!!stockData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C'};
 				console.log('[DEBUG]', JSON.stringify(logEntry3));
 				fetch('http://127.0.0.1:7243/ingest/f52832bd-be78-4014-82a2-b25ab143e235',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(logEntry3)}).catch(()=>{});
 				// #endregion
